@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Dictation — talk, it types, nothing leaves your PC</title>
+<meta name="description" content="Local, offline voice typing for Windows, macOS and Linux. Hold a shortcut, speak, release — your words appear in any app. Detect any key or click as the trigger. Auto clipboard, clipboard history, no account, no cloud.">
+<style>
+  :root {
+    --bg: #0c0e12;
+    --bg-2: #10131a;
+    --card: #141822;
+    --card-2: #171c27;
+    --line: #262d3b;
+    --text: #eef1f6;
+    --muted: #9aa4b5;
+    --dim: #6f7b8e;
+    --green: #34cc60;
+    --red: #ec3e36;
+    --green-soft: rgba(52, 204, 96, .13);
+    --red-soft: rgba(236, 62, 54, .13);
+    --radius: 18px;
+    --shadow: 0 24px 60px rgba(0, 0, 0, .45);
+    --mono: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.65 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; }
+
+  .wrap {
+    width: min(1140px, calc(100% - 40px));
+    margin: 0 auto;
+  }
+
+  /* ---------------------------------------------------------------- nav */
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    backdrop-filter: blur(14px);
+    background: rgba(12, 14, 18, .78);
+    border-bottom: 1px solid rgba(255, 255, 255, .05);
+  }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    padding: 16px 0;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    font-weight: 650;
+    letter-spacing: -.01em;
+    text-decoration: none;
+    font-size: 15.5px;
+  }
+
+  .brand-lamp {
+    width: 22px;
+    height: 34px;
+    border-radius: 7px;
+    background: #22262f;
+    border: 1px solid #0a0b0d;
+    padding: 3px;
+    display: grid;
+    gap: 2px;
+    place-items: center;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+  }
+
+  .brand-lamp i {
+    display: block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+
+  .brand-lamp i:first-child { background: var(--red); box-shadow: 0 0 9px rgba(236,62,54,.55); }
+  .brand-lamp i:last-child { background: rgba(52,204,96,.18); }
+
+  nav.links {
+    display: flex;
+    gap: 24px;
+    margin-left: auto;
+    font-size: 14px;
+    color: var(--muted);
+  }
+
+  nav.links a { text-decoration: none; transition: color .18s; }
+  nav.links a:hover { color: var(--text); }
+
+  .nav .cta {
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    padding: 9px 16px;
+    border-radius: 10px;
+    color: #07130a;
+    background: var(--green);
+    transition: transform .18s, box-shadow .18s;
+    box-shadow: 0 6px 20px rgba(52, 204, 96, .22);
+    white-space: nowrap;
+  }
+
+  .nav .cta:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(52,204,96,.3); }
+
+  /* --------------------------------------------------------------- hero */
+  .hero {
+    position: relative;
+    padding: 86px 0 72px;
+    overflow: hidden;
+  }
+
+  .hero::before,
+  .hero::after {
+    content: "";
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(90px);
+    pointer-events: none;
+  }
+
+  .hero::before {
+    width: 560px;
+    height: 560px;
+    right: -120px;
+    top: -180px;
+    background: radial-gradient(circle, rgba(52,204,96,.16), transparent 66%);
+  }
+
+  .hero::after {
+    width: 460px;
+    height: 460px;
+    left: -160px;
+    bottom: -220px;
+    background: radial-gradient(circle, rgba(236,62,54,.10), transparent 68%);
+  }
+
+  .hero-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1.05fr .95fr;
+    gap: 56px;
+    align-items: center;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12.5px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,.025);
+    border-radius: 999px;
+    padding: 6px 13px;
+    margin-bottom: 26px;
+  }
+
+  .eyebrow .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 10px rgba(52,204,96,.7);
+  }
+
+  h1 {
+    font-size: clamp(2.3rem, 4.4vw, 3.5rem);
+    line-height: 1.05;
+    letter-spacing: -.035em;
+    margin: 0 0 22px;
+    font-weight: 700;
+  }
+
+  h1 em {
+    font-style: normal;
+    color: var(--green);
+  }
+
+  .lede {
+    font-size: 18px;
+    color: #c3cbd8;
+    max-width: 33em;
+    margin: 0 0 30px;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 13px 21px;
+    border-radius: 12px;
+    transition: transform .18s, background .18s, border-color .18s;
+  }
+
+  .btn-primary {
+    background: var(--green);
+    color: #06120a;
+    box-shadow: 0 12px 30px rgba(52,204,96,.24);
+  }
+
+  .btn-primary:hover { transform: translateY(-2px); }
+
+  .btn-ghost {
+    border: 1px solid var(--line);
+    color: var(--text);
+    background: rgba(255,255,255,.02);
+  }
+
+  .btn-ghost:hover { border-color: #3a4456; background: rgba(255,255,255,.045); }
+
+  .hero-note {
+    margin-top: 22px;
+    font-size: 13px;
+    color: var(--dim);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+  }
+
+  .hero-note span::before {
+    content: "·";
+    margin-right: 12px;
+    color: #3c4658;
+  }
+
+  .hero-note span:first-child::before { content: ""; margin: 0; }
+
+  /* ------------------------------------------------------------- mockup */
+  .stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 18px;
+    min-height: 360px;
+    padding: 6px 0 18px;
+  }
+
+  .mock-panels {
+    position: relative;
+    z-index: 2;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px 20px;
+    margin-top: 16px;
+    font-size: 11.5px;
+    color: var(--dim);
+  }
+
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .dot-red { background: var(--red); box-shadow: 0 0 8px rgba(236, 62, 54, .65); }
+  .dot-green { background: var(--green); box-shadow: 0 0 8px rgba(52, 204, 96, .65); }
+
+  .desk-glow {
+    position: absolute;
+    inset: auto 12% 26px;
+    height: 240px;
+    background: radial-gradient(ellipse at center, rgba(52, 204, 96, .11), transparent 70%);
+    filter: blur(6px);
+  }
+
+  .traffic {
+    position: relative;
+    flex: none;
+    width: 68px;
+    padding: 10px 8px;
+    border-radius: 19px;
+    background: #23262e;
+    border: 1px solid #090a0c;
+    box-shadow: var(--shadow), inset 0 0 0 1px rgba(255,255,255,.035);
+    z-index: 3;
+  }
+
+  .traffic i {
+    display: block;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    margin: 0 auto;
+    background: #3a2221;
+    box-shadow: inset 0 4px 9px rgba(0,0,0,.55);
+  }
+
+  .traffic i.lit {
+    background: radial-gradient(circle at 34% 30%, #ff8a7f, var(--red) 48%, #a71912 100%);
+    box-shadow: 0 0 26px rgba(236,62,54,.55), inset 0 0 14px rgba(255,255,255,.18);
+  }
+
+  .traffic i + i { margin-top: 9px; background: #1d3326; }
+
+  .traffic i.green.lit {
+    background: radial-gradient(circle at 34% 30%, #c6ffd7, var(--green) 46%, #14712f 100%);
+    box-shadow: 0 0 30px rgba(52,204,96,.6), inset 0 0 14px rgba(255,255,255,.2);
+  }
+
+  .traffic .caption {
+    text-align: center;
+    font-size: 8px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: #7e889a;
+    margin-top: 8px;
+  }
+
+  .panel {
+    position: relative;
+    width: 100%;
+    background: #1b1e25;
+    border: 1px solid #3a404c;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    z-index: 2;
+  }
+
+  .panel + .panel { margin-top: 14px; }
+
+  .panel-top {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 13px 15px;
+    background: #1e222a;
+    border-bottom: 1px solid #2b3140;
+  }
+
+  .panel-top .status-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 9px rgba(52,204,96,.75);
+    flex: none;
+  }
+
+  .panel-title {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: #e9ecf1;
+  }
+
+  .panel-meta {
+    margin-left: auto;
+    font-size: 11px;
+    color: #8f99a9;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .panel-rows { padding: 8px 0 4px; }
+
+  .prow {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 8px;
+    padding: 7px 15px;
+    font-size: 12.5px;
+    color: #dfe4ec;
+    line-height: 1.45;
+  }
+
+  .prow .n,
+  .prow .t {
+    align-self: start;
+    font-size: 10.5px;
+    color: #7f8999;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .prow.active { background: #22262f; }
+
+  .panel-hint {
+    padding: 6px 15px 11px;
+    font-size: 10.5px;
+    color: #7f8999;
+  }
+
+  /* -------------------------------------------------------------- stats */
+  .stats {
+    border-top: 1px solid rgba(255,255,255,.06);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+    background: linear-gradient(180deg, rgba(255,255,255,.02), transparent);
+  }
+
+  .stats .wrap {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    padding: 26px 0;
+  }
+
+  .stat strong {
+    display: block;
+    font-size: 22px;
+    letter-spacing: -.02em;
+    font-weight: 650;
+  }
+
+  .stat span {
+    font-size: 12.5px;
+    color: var(--dim);
+  }
+
+  /* ----------------------------------------------------------- sections */
+  section { padding: 84px 0; }
+
+  .section-head {
+    max-width: 640px;
+    margin-bottom: 44px;
+  }
+
+  .kicker {
+    font-size: 12px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--green);
+    font-weight: 650;
+    margin-bottom: 14px;
+  }
+
+  h2 {
+    font-size: clamp(1.8rem, 3.2vw, 2.5rem);
+    line-height: 1.12;
+    letter-spacing: -.028em;
+    margin: 0 0 14px;
+    font-weight: 680;
+  }
+
+  .section-head p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 16.5px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+
+  .card {
+    position: relative;
+    background: linear-gradient(180deg, var(--card-2), var(--card));
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 24px;
+    transition: transform .2s, border-color .2s;
+  }
+
+  .card:hover { transform: translateY(-3px); border-color: #334054; }
+
+  .card .ico {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    display: grid;
+    place-items: center;
+    background: var(--green-soft);
+    color: var(--green);
+    margin-bottom: 16px;
+  }
+
+  .card .ico svg { width: 19px; height: 19px; display: block; }
+
+  .card.red .ico { background: var(--red-soft); color: #ff7a72; }
+
+  .card h3 {
+    font-size: 16px;
+    margin: 0 0 7px;
+    letter-spacing: -.01em;
+    font-weight: 640;
+  }
+
+  .card p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .card .tag {
+    display: inline-block;
+    margin-top: 14px;
+    font-size: 11px;
+    color: var(--dim);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 9px;
+  }
+
+  /* --------------------------------------------------------- clipboard */
+  .clipboard {
+    display: grid;
+    grid-template-columns: .95fr 1.05fr;
+    gap: 54px;
+    align-items: center;
+  }
+
+  .clipboard h2 { margin-bottom: 16px; }
+
+  .clipboard p { color: var(--muted); margin: 0 0 16px; }
+
+  .ticks {
+    list-style: none;
+    padding: 0;
+    margin: 24px 0 0;
+    display: grid;
+    gap: 11px;
+    font-size: 14.5px;
+    color: #cfd6e1;
+  }
+
+  .ticks li {
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+  }
+
+  .ticks li::before {
+    content: "✓";
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--green-soft);
+    color: var(--green);
+    font-size: 11px;
+    display: grid;
+    place-items: center;
+    margin-top: 3px;
+  }
+
+  /* ------------------------------------------------------------- steps */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    counter-reset: step;
+  }
+
+  .step {
+    position: relative;
+    padding: 26px 22px 24px;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: var(--card);
+  }
+
+  .step::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    top: 18px;
+    right: 20px;
+    font: 600 13px/1 var(--mono);
+    color: var(--dim);
+  }
+
+  .step h3 { margin: 0 0 8px; font-size: 16px; }
+
+  .step p { margin: 0; color: var(--muted); font-size: 14px; }
+
+  .flow {
+    margin-top: 22px;
+    padding: 18px 20px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: #0f131a;
+    font: 12.5px/1.9 var(--mono);
+    color: #9fb0c6;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  .flow b { color: var(--green); font-weight: 500; }
+
+  /* ------------------------------------------------------------- setup */
+  .setup {
+    display: grid;
+    grid-template-columns: .9fr 1.1fr;
+    gap: 48px;
+    align-items: start;
+  }
+
+  pre {
+    margin: 0;
+    background: #0b0f15;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px 22px;
+    font: 13px/1.85 var(--mono);
+    color: #cbd6e4;
+    overflow-x: auto;
+  }
+
+  pre .c { color: #68758a; }
+  pre .g { color: #7ee29b; }
+
+  .req {
+    margin-top: 20px;
+    display: grid;
+    gap: 9px;
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+
+  .req div { display: flex; justify-content: space-between; gap: 18px; border-bottom: 1px dashed rgba(255,255,255,.07); padding-bottom: 8px; }
+  .req b { color: #d5dde9; font-weight: 550; }
+
+  /* --------------------------------------------------------------- faq */
+  details {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--card);
+    padding: 0 20px;
+    margin-bottom: 10px;
+  }
+
+  details summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 17px 0;
+    font-size: 15px;
+    font-weight: 560;
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  details summary::-webkit-details-marker { display: none; }
+
+  details summary::after {
+    content: "+";
+    color: var(--dim);
+    font-weight: 400;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  details[open] summary::after { content: "−"; }
+
+  details p {
+    margin: 0 0 18px;
+    color: var(--muted);
+    font-size: 14.5px;
+    max-width: 74ch;
+  }
+
+  /* ------------------------------------------------------------ footer */
+  footer {
+    border-top: 1px solid rgba(255,255,255,.06);
+    padding: 34px 0 46px;
+    color: var(--dim);
+    font-size: 13px;
+  }
+
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 28px;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .foot .fine { max-width: 62ch; line-height: 1.6; }
+
+  @media (max-width: 980px) {
+    .hero-grid, .clipboard, .setup { grid-template-columns: 1fr; gap: 38px; }
+    .cards, .steps { grid-template-columns: 1fr 1fr; }
+    .stats .wrap { grid-template-columns: 1fr 1fr; }
+    .stage { min-height: auto; }
+    .traffic { width: 58px; padding: 8px 6px; }
+    .traffic i { width: 42px; height: 42px; }
+    nav.links { display: none; }
+  }
+
+  @media (max-width: 640px) {
+    .cards, .steps { grid-template-columns: 1fr; }
+    .hero { padding-top: 56px; }
+    section { padding: 62px 0; }
+    .stage { flex-direction: column; align-items: stretch; }
+    .traffic { align-self: center; margin-top: 4px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top">
+      <span class="brand-lamp" aria-hidden="true"><i></i><i></i></span>
+      Voice Dictation
+    </a>
+    <nav class="links">
+      <a href="#why">Why voice</a>
+      <a href="#clipboard">Clipboard</a>
+      <a href="#how">How it works</a>
+      <a href="#setup">Setup</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <a class="cta" href="#setup">Get it running</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- ------------------------------------------------------------- hero -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow"><span class="dot"></span> Local-first dictation · Windows · macOS · Linux</span>
+        <h1>Talk. It types.<br><em>Nothing leaves.</em></h1>
+        <p class="lede">
+          Hold your shortcut, say what you mean, let go. Your words appear
+          in whatever app is already open — email, Slack, Word, a ticket, a
+          spreadsheet. Transcribed on your own machine by Qwen3-ASR, in about a
+          second. No account. No cloud. No subscription.
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href="#setup">Set it up in 5 minutes</a>
+          <a class="btn btn-ghost" href="#how">See how it works</a>
+        </div>
+        <p class="hero-note">
+          <span>Windows · macOS · Linux</span>
+          <span>Runs on CPU</span>
+          <span>Model downloads once</span>
+          <span>Your audio never leaves the machine</span>
+        </p>
+      </div>
+
+      <div class="stage" aria-label="Preview of the traffic light, transcript panel and clipboard history">
+        <div class="desk-glow"></div>
+
+        <div class="mock-panels">
+          <div class="panel">
+            <div class="panel-top">
+              <span class="status-dot"></span>
+              <span class="panel-title">Recording</span>
+              <span class="panel-meta">0:07</span>
+            </div>
+            <div class="panel-rows">
+              <div class="prow"><span class="n">1</span><span>Turn on the kitchen lights and set the thermostat to 22 degrees.</span></div>
+              <div class="prow active"><span class="n">2</span><span>Remind me to email the invoice before Friday.</span></div>
+            </div>
+            <div class="panel-hint">Click to expand · right-click copies the history</div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-top">
+              <span class="panel-title">Clipboard history · 3</span>
+              <span class="panel-meta">left-click</span>
+            </div>
+            <div class="panel-rows">
+              <div class="prow"><span class="n">1</span><span>curl -X POST https://api.example.com/v1/notes</span></div>
+              <div class="prow"><span class="n">2</span><span>meet me at the dock at 6</span></div>
+              <div class="prow"><span class="n">3</span><span>Invoice 4471 is paid — thanks!</span></div>
+            </div>
+            <div class="panel-hint">Click an item to copy · right-click to close</div>
+          </div>
+
+          <div class="legend">
+            <span><i class="dot dot-red"></i> red = idle</span>
+            <span><i class="dot dot-green"></i> green = listening</span>
+          </div>
+        </div>
+
+        <div class="traffic" aria-hidden="true">
+          <i></i>
+          <i class="green lit"></i>
+          <div class="caption">tray</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ stats -->
+  <div class="stats">
+    <div class="wrap">
+      <div class="stat"><strong>100%</strong><span>offline after setup</span></div>
+      <div class="stat"><strong>~150 wpm</strong><span>speaking speed, not typing speed</span></div>
+      <div class="stat"><strong>0</strong><span>accounts, API keys or seats</span></div>
+      <div class="stat"><strong>1 button</strong><span>hold, speak, release</span></div>
+    </div>
+  </div>
+
+  <!-- -------------------------------------------------------------- why -->
+  <section id="why">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">Why voice typing</div>
+        <h2>You think faster than you type.</h2>
+        <p>
+          Most people speak at 130–160 words a minute and type at 40. Dictation
+          closes that gap without moving your hands off the mouse, and without
+          sending a single second of audio to a server.
+        </p>
+      </div>
+
+      <div class="cards">
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg></div>
+          <h3>3–4× faster than typing</h3>
+          <p>Write the email, the ticket, the note, the commit message at the speed you talk. Cleanup fixes numbers, punctuation and “um” before it lands.</p>
+          <span class="tag">~1–1.5× realtime on CPU</span>
+        </article>
+
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3l7.5 17 2.4-7.1L21 10.5 4 3Z"/></svg></div>
+          <h3>Your hands never leave the mouse</h3>
+          <p>One side button starts and stops it. Nothing to click, no window to switch to, no overlay to dismiss first — just talk into the field you are already in.</p>
+          <span class="tag">XButton2, or XButton1</span>
+        </article>
+
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg></div>
+          <h3>Any shortcut, detected in one click</h3>
+          <p>A side button, the middle click, F8 or Ctrl+Alt+J — press it once and the app records it as your trigger. No editing files, no restart, no dialog to fight with.</p>
+          <span class="tag">press it, it is set</span>
+        </article>
+
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></svg></div>
+          <h3>Private by construction</h3>
+          <p>Speech recognition runs locally. The app is forced into offline mode, so client names, salaries, medical notes and passwords never touch a network.</p>
+          <span class="tag">no telemetry, no cloud</span>
+        </article>
+
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+          <h3>Works in every text box</h3>
+          <p>Gmail, Outlook, Slack, Teams, Word, Excel, VS Code, Jira, a terminal. If you can type in it, you can dictate into it — the app pastes like a keyboard would.</p>
+          <span class="tag">any text field</span>
+        </article>
+
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3h6v1"/><path d="M9 10h6M9 14h6"/></svg></div>
+          <h3>Auto clipboard</h3>
+          <p>Every transcript stays on your clipboard automatically, so you can paste it again in a second app without repeating yourself. Turn it off with one config key if you prefer.</p>
+          <span class="tag">on by default</span>
+        </article>
+
+        <article class="card red">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="20" rx="4"/><circle cx="12" cy="7.5" r="1.5"/><circle cx="12" cy="16.5" r="1.5"/></svg></div>
+          <h3>A traffic light, not a mystery</h3>
+          <p>Two lamps in the taskbar: green while it listens or transcribes, red when it is idle. No spinner to interpret, no “is it still recording?” moment.</p>
+          <span class="tag">only red and green</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- clipboard -->
+  <section id="clipboard" style="padding-top:0">
+    <div class="wrap clipboard">
+      <div>
+        <div class="kicker">Auto clipboard + history</div>
+        <h2>Your last five copies, one click away.</h2>
+        <p>
+          Dictation is only half of typing. The other half is moving text around:
+          a link from a ticket, an address from a chat, a query you want to run
+          again.
+        </p>
+        <p>
+          This app keeps the last few things that passed through the clipboard.
+          <strong>Left-click the traffic light</strong> and they appear in a small
+          panel; click one and it goes straight back on the clipboard, ready to
+          paste anywhere.
+        </p>
+        <ul class="ticks">
+          <li>Transcripts are kept on the clipboard automatically — no re-dictation.</li>
+          <li>History holds the last five items, de-duplicated, newest first.</li>
+          <li>Right-click the icon for the menu; right-click the panel to close it.</li>
+          <li>The panel never takes keyboard focus, so paste targets stay intact.</li>
+        </ul>
+      </div>
+
+      <div class="panel" style="width:100%">
+        <div class="panel-top">
+          <span class="panel-title">Clipboard history · 5</span>
+          <span class="panel-meta">✕ close</span>
+        </div>
+        <div class="panel-rows">
+          <div class="prow active"><span class="n">1</span><span>Turn on the kitchen lights and set the thermostat to 22 degrees.</span></div>
+          <div class="prow"><span class="n">2</span><span>Hi Priya, thanks for the quick turnaround on the invoice. I’ve approved it and it should clear on Friday.</span></div>
+          <div class="prow"><span class="n">3</span><span>https://github.com/qwen-lm/qwen3-asr</span></div>
+          <div class="prow"><span class="n">4</span><span>SELECT * FROM clients WHERE active = 1 ORDER BY created_at DESC;</span></div>
+          <div class="prow"><span class="n">5</span><span>Meeting moved to 3:30pm — same room.</span></div>
+        </div>
+        <div class="panel-hint">Click an item to copy · right-click to close</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------------- how -->
+  <section id="how" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">How it works</div>
+        <h2>One button, no workflow to learn.</h2>
+        <p>Press, talk, release. The rest — language detection, cleanup, pasting, clipboard — happens on its own.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <h3>Hold your shortcut</h3>
+          <p>Out of the box that is the mouse side button. Or press any key, combination or click once in the recorder and it becomes the trigger — no restart.</p>
+        </div>
+        <div class="step">
+          <h3>Speak normally</h3>
+          <p>Qwen3-ASR 1.7B transcribes 16 kHz audio locally. Pin a language for short clips, or leave it on Auto for mixed speech.</p>
+        </div>
+        <div class="step">
+          <h3>Release</h3>
+          <p>Silence is trimmed, numbers and punctuation are tidied, the text is pasted where your cursor was and stays on the clipboard.</p>
+        </div>
+      </div>
+
+      <div class="flow">
+        <b>shortcut hook</b> → start_recording() → <b>16 kHz frames</b> → release → trim + guards → <b>Qwen3-ASR</b> → cleanup → Ctrl+V / Cmd+V → <b>clipboard history</b>
+      </div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- handover -->
+  <section id="handover" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">Share it with a client</div>
+        <h2>Hand a client the folder. That’s the licence.</h2>
+        <p>
+          There is nothing to provision: no tenant, no seat, no key to rotate.
+          Copy the directory, run <code>setup.bat</code> once, download the model
+          once, and it runs on their machine with their microphone.
+        </p>
+      </div>
+
+      <div class="cards">
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5V8Z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div>
+          <h3>Portable by design</h3>
+          <p>Config is a single <code>config.json</code>; hotwords are a text file. Move the folder, or zip it and send it — there is no installer to sign.</p>
+          <span class="tag">folder + Python 3.12</span>
+        </article>
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6"/></svg></div>
+          <h3>No per-seat cost</h3>
+          <p>Both models are Apache-2.0 and run locally. Ten colleagues cost the same as one: nothing.</p>
+          <span class="tag">Apache-2.0 models</span>
+        </article>
+        <article class="card">
+          <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"/></svg></div>
+          <h3>Fits a client’s privacy rules</h3>
+          <p>Audio and text stay on the device. That is usually the whole conversation with a client’s IT reviewer: no data-processing agreement needed for speech.</p>
+          <span class="tag">offline enforced</span>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------ setup -->
+  <section id="setup" style="padding-top:0">
+    <div class="wrap setup">
+      <div>
+        <div class="kicker">Setup</div>
+        <h2>Five minutes, once.</h2>
+        <p style="color:var(--muted);margin:0">
+          The model download is the only time this app needs a network. After
+          that it is offline on purpose — Hugging Face cache-only mode is forced
+          on at startup.
+        </p>
+        <div class="req">
+          <div><span>Windows</span><b>11 (10 likely works)</b></div>
+          <div><span>macOS</span><b>12+ (Apple silicon or Intel)</b></div>
+          <div><span>Linux</span><b>X11 desktop (not Wayland)</b></div>
+          <div><span>Python</span><b>3.10 – 3.12</b></div>
+          <div><span>Memory</span><b>8 GB+ (16 GB comfortable)</b></div>
+          <div><span>Disk</span><b>~4.4 GB for the model</b></div>
+          <div><span>GPU</span><b>not required</b></div>
+        </div>
+      </div>
+
+      <div>
+<pre><span class="c"># Windows</span>
+<span class="g">setup.bat</span>                       <span class="c"># once</span>
+.venv\Scripts\python.exe download_model.py
+<span class="g">run_dictate_background.vbs</span>
+
+<span class="c"># macOS / Linux</span>
+<span class="g">./setup.sh</span>                      <span class="c"># once</span>
+.venv/bin/python download_model.py
+<span class="g">./run_dictate.sh</span>
+
+<span class="c"># check mic, model, permissions and dependencies</span>
+.venv\Scripts\python.exe dictate.py --doctor
+dictate.py --set-shortcut "ctrl+alt+j"   <span class="c"># any key or mouse click</span></pre>
+        <p style="color:var(--dim);font-size:13px;margin-top:14px">
+          Tip: drag the traffic light out of the <code>^</code> overflow onto the
+          taskbar so you can always see it, or enable it under Settings →
+          Personalization → Taskbar → Other system tray icons.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------------- faq -->
+  <section id="faq" style="padding-top:0">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="kicker">Questions</div>
+        <h2>The things people ask first.</h2>
+      </div>
+
+      <details open>
+        <summary>Does it send my audio or text anywhere?</summary>
+        <p>No. Recognition runs on your CPU through a local copy of Qwen3-ASR, and the app forces <code>HF_HUB_OFFLINE=1</code> so even library update checks cannot phone home. The only network use is the one-time model download you start yourself.</p>
+      </details>
+
+      <details>
+        <summary>What does “auto clipboard” change?</summary>
+        <p>Normally a paste helper restores whatever was on your clipboard before. Here the transcript stays on the clipboard instead, so you can paste it into a second app without dictating again. Set <code>"auto_clipboard": false</code> to restore the old behaviour.</p>
+      </details>
+
+      <details>
+        <summary>How does the clipboard history work?</summary>
+        <p>Every text that lands on the clipboard is recorded (newest first, de-duplicated, five items by default — change <code>clipboard_history_size</code>). Left-click the traffic light and the list appears; click an item to copy it back. The panel auto-hides and never takes focus.</p>
+      </details>
+
+      <details>
+        <summary>Will it work in an app running as administrator?</summary>
+        <p>Windows blocks synthetic keystrokes from a normal process into an elevated one. Use tray → <em>Restart as Administrator</em> for those.</p>
+      </details>
+
+      <details>
+        <summary>Can I choose my own shortcut?</summary>
+        <p>Yes. Tray → Shortcut → <em>Detect a new shortcut…</em>, then press a side button, the middle click, F8 or a combination such as Ctrl+Alt+J. It is saved and applied immediately. A bare letter is refused on purpose so normal typing is never hijacked.</p>
+      </details>
+
+      <details>
+        <summary>Does it break the browser back/forward buttons?</summary>
+        <p>Not on Windows: the low-level mouse hook swallows the side button before the browser sees it, so you dictate instead of navigating. macOS and Linux can only observe the shortcut, so pick a combination those apps do not already use.</p>
+      </details>
+
+      <details>
+        <summary>Can it handle more than English?</summary>
+        <p>Yes — Auto detects the language, and you can pin English, Chinese, Cantonese, Japanese, Korean, Spanish, French, German or Russian from the tray. Pinning stops short clips from flipping language.</p>
+      </details>
+
+      <details>
+        <summary>What about a Mac or Linux?</summary>
+        <p>Both are supported from the same folder: <code>setup.sh</code> and <code>run_dictate.sh</code> for macOS/Linux, with Cmd+V, a non-activating NSPanel on macOS and xclip/wl-clipboard on Linux. Linux needs an X11 session — Wayland blocks global hooks and tray icons. Windows is the platform that has been tested on real hardware so far.</p>
+      </details>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div style="display:flex;align-items:center;gap:11px">
+      <span class="brand-lamp" aria-hidden="true" style="width:18px;height:28px;border-radius:6px"><i style="width:9px;height:9px"></i><i style="width:9px;height:9px"></i></span>
+      <strong style="color:#cfd6e1;font-weight:600">Voice Dictation</strong>
+    </div>
+    <p class="fine">
+      Built for a Windows 11 2-in-1 and portable to macOS and Linux, running
+      Qwen3-ASR-1.7B on CPU. Application code is yours to use; the models are
+      Apache-2.0. Check the licence of any model you swap in.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

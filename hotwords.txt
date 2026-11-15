@@ -1,0 +1,8 @@
+# Extra words the speech model should spell exactly as written.
+# One term per line. Everything after '#' is a comment. Re-read automatically.
+#
+# Good candidates: product names, people, file names, acronyms, jargon.
+OpenCode
+Qwen3-ASR
+PyTorch
+Hugging Face

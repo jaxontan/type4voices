@@ -1,0 +1,32 @@
+# Runtime dependencies.
+# Install with:  python -m pip install -r requirements.txt
+#
+# The versions below were verified on Windows. The two entries at the end are
+# platform extras for macOS and Linux: they are not pinned because they follow
+# the OS/Python combination on that machine.
+#
+# torch: the default PyPI wheel is CPU-only. For an Intel Arc / Core Ultra GPU
+# install the XPU build instead, e.g.
+#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/xpu
+numpy==2.5.4
+sounddevice==0.5.6
+soundfile==0.14.0
+pillow==12.3.0
+pynput==1.8.2
+pyperclip==1.11.0
+pystray==0.19.5
+torch==2.15.0
+transformers==4.57.6
+qwen-asr==0.0.6
+huggingface_hub==0.36.2
+
+# macOS: PyObjC gives the transcript panel a real non-activating NSWindow.
+pyobjc-framework-Cocoa>=10.0; sys_platform == "darwin"
+# Linux X11: pynput's keyboard/mouse backend needs python-xlib.
+python-xlib>=0.33; sys_platform == "linux"
+
+# System packages that pip cannot install:
+#   Linux   : libportaudio2 (sounddevice), python3-tk (panel),
+#             xclip or xsel (X11 clipboard) or wl-clipboard (Wayland)
+#   macOS   : PortAudio is bundled by sounddevice; tkinter ships with python.org
+#             builds. Grant Accessibility, Input Monitoring and Microphone.
