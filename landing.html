@@ -3,2668 +3,761 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>type4voices — Local Offline Voice Typing for Windows, macOS &amp; Linux</title>
-<meta name="description" content="Hold your mouse side button, speak, release. Instant dictation at the cursor in any application. Powered locally by Qwen3-ASR with PyTorch. Zero cloud, zero telemetry, zero accounts.">
+<meta name="color-scheme" content="light dark">
+<title>type4voices: local voice typing for Windows, macOS and Linux</title>
+<meta name="description" content="Hold a mouse button, speak, let go, and the words land at the cursor. Qwen3-ASR runs on your own CPU, so dictation works offline and audio never leaves the machine.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='5' fill='%2322252a'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23c33a30'/%3E%3Ccircle cx='8' cy='16' r='3' fill='%233a3f46'/%3E%3C/svg%3E">
 <style>
-  /* -------------------------------------------------------------------------
-     DESIGN SYSTEM: Precision Industrial Utility
-     Clean, mechanical, uncompromising. No purple/cyan AI gradients.
-     No generic SaaS bento cards. Authentic desktop engineering.
-     ------------------------------------------------------------------------- */
   :root {
-    --bg-base: #0b0e14;
-    --bg-surface: #11151f;
-    --bg-elevated: #171c28;
-    --bg-overlay: #1e2433;
-    --border-subtle: #1f2737;
-    --border-strong: #2e384d;
-    --border-bright: #43516f;
-
-    --text-high: #f0f4fc;
-    --text-mid: #9eb0cb;
-    --text-low: #5f708c;
-    --text-dim: #3e4c63;
-
-    /* Authentic Signal Lamps (Traffic Light) */
-    --lamp-red: #f03e3e;
-    --lamp-red-glow: rgba(240, 62, 62, 0.55);
-    --lamp-red-dark: #3b1414;
-    --lamp-green: #2ecc71;
-    --lamp-green-glow: rgba(46, 204, 113, 0.55);
-    --lamp-green-dark: #12331f;
-    --lamp-off: #202633;
-
-    --amber: #f39c12;
-    --amber-soft: rgba(243, 156, 18, 0.12);
-    --accent-blue: #3b82f6;
-
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Consolas, Menlo, monospace;
-    --radius-sm: 4px;
-    --radius-md: 8px;
-    --radius-lg: 14px;
-    --radius-xl: 20px;
-    --shadow-window: 0 16px 48px -8px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --shadow-tactile: 0 2px 4px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+    color-scheme: light dark;
+    --paper: #fbfaf7;
+    --ink: #15171a;
+    --ink-2: #4d525a;
+    --ink-3: #6b7178;
+    --rule: #e4e1da;
+    --wash: #f2efe9;
+    --green: #1c8248;
+    --red: #c33a30;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --max: 940px;
   }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html {
-    scroll-behavior: smooth;
-    background-color: var(--bg-base);
-    color: var(--text-high);
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #131518;
+      --ink: #eceef1;
+      --ink-2: #b3b9c1;
+      --ink-3: #868d97;
+      --rule: #2a2e34;
+      --wash: #1a1d21;
+      --green: #46d07c;
+      --red: #ef6a5f;
+    }
   }
+
+  *, *::before, *::after { box-sizing: border-box; }
 
   body {
-    font-family: var(--font-sans);
-    font-size: 15px;
-    line-height: 1.6;
-    color: var(--text-high);
-    background-color: var(--bg-base);
-    background-image: 
-      radial-gradient(circle at 1px 1px, rgba(255,255,255,0.035) 1px, transparent 0);
-    background-size: 28px 28px;
-    background-position: -1px -1px;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    min-height: 100vh;
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 16px/1.65 var(--sans);
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
   }
 
-  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
 
-  .wrap {
-    width: min(1180px, calc(100% - 48px));
-    margin: 0 auto;
-  }
+  h1, h2, h3 { text-wrap: balance; }
 
-  /* ---------------------------------------------------------------- Top Bar */
-  .top-banner {
-    background: #090c10;
-    border-bottom: 1px solid var(--border-subtle);
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-mid);
-    padding: 7px 0;
-  }
+  a { color: inherit; }
 
-  .top-banner .wrap {
+  /* ---------------------------------------------------------------- header -- */
+
+  .site { border-bottom: 1px solid var(--rule); }
+
+  .site .wrap {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
+    gap: 24px;
+    min-height: 66px;
   }
 
-  .top-banner-specs {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-  }
-
-  .top-banner-specs span {
+  .brand {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-  }
-
-  .status-pulse {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--lamp-green);
-    box-shadow: 0 0 8px var(--lamp-green);
-    display: inline-block;
-  }
-
-  /* --------------------------------------------------------- Nav & Brand */
-  header.site-header {
-    position: sticky;
-    top: 0;
-    z-index: 99;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    background: rgba(11, 14, 20, 0.88);
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
-  .navbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 0;
-  }
-
-  .brand-group {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    cursor: pointer;
-  }
-
-  /* The Hardware Traffic Light Indicator in Nav */
-  .traffic-light-mini {
-    width: 20px;
-    height: 34px;
-    background: #171a22;
-    border: 1px solid #090b0e;
-    border-radius: 5px;
-    padding: 3px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.08);
-  }
-
-  .traffic-light-mini .lamp {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    margin: 0 auto;
-    background: var(--lamp-off);
-    transition: background 0.15s ease, box-shadow 0.15s ease;
-  }
-
-  .traffic-light-mini .lamp.red-on {
-    background: var(--lamp-red);
-    box-shadow: 0 0 10px var(--lamp-red-glow), inset 0 1px 2px rgba(255,255,255,0.4);
-  }
-
-  .traffic-light-mini .lamp.green-on {
-    background: var(--lamp-green);
-    box-shadow: 0 0 10px var(--lamp-green-glow), inset 0 1px 2px rgba(255,255,255,0.4);
-  }
-
-  .brand-title {
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  .brand-title span.ver {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-low);
-    font-weight: 500;
-    padding: 1px 5px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-  }
-
-  nav.nav-links {
-    display: flex;
-    align-items: center;
-    gap: 28px;
-    font-size: 14px;
-    color: var(--text-mid);
-  }
-
-  nav.nav-links a {
-    transition: color 0.15s ease;
-  }
-
-  nav.nav-links a:hover {
-    color: var(--text-high);
-  }
-
-  .nav-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    font-family: var(--font-sans);
-    font-size: 13.5px;
-    font-weight: 600;
-    padding: 8px 16px;
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all 0.14s ease;
-    border: 1px solid transparent;
-    user-select: none;
+    gap: 9px;
+    font: 600 15px/1 var(--mono);
+    letter-spacing: .01em;
     text-decoration: none;
   }
 
-  .btn-primary {
-    background: #252d3d;
-    color: #ffffff;
-    border-color: #3e4a64;
-    box-shadow: var(--shadow-tactile);
-  }
-
-  .btn-primary:hover {
-    background: #2f394d;
-    border-color: #536384;
-    transform: translateY(-1px);
-  }
-
-  .btn-primary:active {
-    transform: translateY(1px);
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.4);
-  }
-
-  .btn-accent {
-    background: #1e7e40;
-    color: #f7fff9;
-    border-color: #2bb45b;
-    box-shadow: 0 2px 8px rgba(46, 204, 113, 0.25), inset 0 1px 0 rgba(255,255,255,0.2);
-  }
-
-  .btn-accent:hover {
-    background: #24964d;
-    border-color: #38d66f;
-    box-shadow: 0 4px 14px rgba(46, 204, 113, 0.35);
-    transform: translateY(-1px);
-  }
-
-  .btn-outline {
-    background: transparent;
-    border-color: var(--border-strong);
-    color: var(--text-mid);
-  }
-
-  .btn-outline:hover {
-    border-color: var(--border-bright);
-    color: var(--text-high);
-    background: rgba(255,255,255,0.03);
-  }
-
-  kbd.keycap {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    background: #1e2433;
-    border: 1px solid #333e54;
-    border-bottom: 2px solid #202738;
-    color: var(--text-mid);
-    padding: 1px 5px;
-    border-radius: 4px;
-    box-shadow: 0 1px 1px rgba(0,0,0,0.4);
-    display: inline-block;
-  }
-
-  /* ------------------------------------------------------------- Hero Area */
-  .hero-section {
-    padding: 56px 0 36px;
-    border-bottom: 1px solid var(--border-subtle);
-    position: relative;
-  }
-
-  .hero-header {
-    max-width: 860px;
-    margin-bottom: 36px;
-  }
-
-  .tag-terminal {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    color: var(--text-mid);
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--border-strong);
+  .lamps {
     display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 10px;
+    flex-direction: column;
+    gap: 2px;
+    padding: 3px;
     border-radius: 4px;
-    margin-bottom: 18px;
+    background: #22252a;
   }
 
-  .tag-terminal .dot-green {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--lamp-green);
+  .lamps i { width: 6px; height: 6px; border-radius: 50%; background: #3a3f46; }
+  .lamps i.red { background: var(--red); }
+  .lamps i.green { background: var(--green); }
+
+  nav { display: flex; gap: 24px; }
+
+  nav a { font-size: 13.5px; color: var(--ink-2); text-decoration: none; }
+  nav a:hover { color: var(--ink); }
+
+  @media (max-width: 560px) { nav { display: none; } }
+
+  /* ------------------------------------------------------------------ hero -- */
+
+  .hero { padding-top: 84px; padding-bottom: 76px; }
+
+  .kicker {
+    margin: 0 0 22px;
+    font: 500 11.5px/1 var(--mono);
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-3);
   }
 
-  h1.hero-title {
-    font-size: clamp(28px, 4.4vw, 48px);
-    font-weight: 700;
-    line-height: 1.15;
-    letter-spacing: -0.03em;
-    color: #ffffff;
-    margin-bottom: 20px;
-  }
-
-  p.hero-lead {
-    font-size: clamp(16px, 1.8vw, 19px);
-    color: var(--text-mid);
-    line-height: 1.55;
-    max-width: 760px;
-  }
-
-  p.hero-lead strong {
-    color: var(--text-high);
+  h1 {
+    margin: 0 0 22px;
+    max-width: 23ch;
+    font-size: clamp(2rem, 4.8vw, 3.05rem);
     font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -.028em;
   }
 
-  /* -------------------------------------------------------------------------
-     THE INTERACTIVE PUSH-TO-TALK WORKSTATION (Hero Demo)
-     A tactile, functional, real simulator: hold space or click button,
-     see real waveform, realistic latency, auto paste into focused app,
-     and auto-clipboard panel.
-     ------------------------------------------------------------------------- */
-  .sim-workstation {
-    margin-top: 36px;
-    background: var(--bg-surface);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-window);
-    overflow: hidden;
-    display: grid;
-    grid-template-columns: 340px 1fr;
-  }
-
-  @media (max-width: 900px) {
-    .sim-workstation {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  /* Left Panel: Hardware Controller */
-  .sim-controller {
-    background: #0d1017;
-    border-right: 1px solid var(--border-subtle);
-    padding: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .controller-title {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-low);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  /* Physical Traffic Light Chassis */
-  .traffic-light-chassis {
-    background: #171b24;
-    border: 1px solid #282f3d;
-    border-bottom: 2px solid #0d0f14;
-    border-radius: 12px;
-    padding: 16px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.6), 0 2px 6px rgba(0,0,0,0.3);
-  }
-
-  .chassis-socket {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .lamp-fixture {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: #0f1218;
-    border: 2px solid #28303f;
-    box-shadow: inset 0 3px 6px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.06);
-    display: grid;
-    place-items: center;
-    position: relative;
-  }
-
-  .lamp-bulb {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: #1e2430;
-    transition: all 0.15s ease-out;
-  }
-
-  .lamp-bulb.red {
-    background: var(--lamp-red-dark);
-  }
-
-  .lamp-bulb.red.active {
-    background: radial-gradient(circle at 35% 35%, #ff8a8a 0%, var(--lamp-red) 55%, #a61616 100%);
-    box-shadow: 0 0 24px var(--lamp-red-glow), inset 0 0 10px rgba(255,255,255,0.4);
-  }
-
-  .lamp-bulb.green {
-    background: var(--lamp-green-dark);
-  }
-
-  .lamp-bulb.green.active {
-    background: radial-gradient(circle at 35% 35%, #a3f7c4 0%, var(--lamp-green) 55%, #186637 100%);
-    box-shadow: 0 0 28px var(--lamp-green-glow), inset 0 0 10px rgba(255,255,255,0.5);
-  }
-
-  .lamp-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    color: var(--text-low);
-    text-transform: uppercase;
-  }
-
-  /* Tactile Push-to-Talk Big Button */
-  .ptt-button {
-    background: #18202d;
-    border: 2px solid #36445c;
-    border-bottom: 4px solid #101622;
-    border-radius: 12px;
-    padding: 20px 16px;
-    color: #ffffff;
-    cursor: pointer;
-    user-select: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.08s ease;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-  }
-
-  .ptt-button:hover {
-    background: #1e2738;
-    border-color: #485b7b;
-  }
-
-  .ptt-button.holding,
-  .ptt-button:active {
-    background: #132d20;
-    border-color: #2ecc71;
-    border-bottom-width: 2px;
-    transform: translateY(2px);
-    box-shadow: 0 1px 4px rgba(0,0,0,0.6), 0 0 20px rgba(46, 204, 113, 0.25);
-  }
-
-  .ptt-label {
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .ptt-sub {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    color: var(--text-mid);
-  }
-
-  /* Live Audio Waveform Canvas */
-  .waveform-container {
-    background: #090b0f;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 10px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .waveform-header {
-    display: flex;
-    justify-content: space-between;
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    color: var(--text-low);
-  }
-
-  canvas#waveformCanvas {
-    width: 100%;
-    height: 48px;
-    display: block;
-    background: #090b0f;
-  }
-
-  /* Controller Presets */
-  .presets-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .presets-group label {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-low);
-    text-transform: uppercase;
-  }
-
-  .preset-buttons {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-  }
-
-  .preset-btn {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    padding: 6px 8px;
-    background: #131822;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--text-mid);
-    cursor: pointer;
-    text-align: left;
-    transition: all 0.1s ease;
-  }
-
-  .preset-btn:hover {
-    background: #1b2230;
-    color: var(--text-high);
-    border-color: var(--border-strong);
-  }
-
-  .preset-btn.active {
-    background: #1f2b3e;
-    color: #ffffff;
-    border-color: #3b82f6;
-  }
-
-  /* Mic Test Toggle */
-  .mic-toggle-row {
-    font-size: 12px;
-    color: var(--text-mid);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 4px;
-    border-top: 1px dashed var(--border-subtle);
-  }
-
-  .mic-toggle-row button {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    background: transparent;
-    border: 1px solid var(--border-strong);
-    color: var(--text-mid);
-    padding: 3px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .mic-toggle-row button:hover {
-    color: var(--text-high);
-    border-color: var(--border-bright);
-  }
-
-  /* Right Panel: The Host Operating System Screen */
-  .sim-screen {
-    background: #11151f;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    position: relative;
-  }
-
-  .mock-window-frame {
-    background: #0d1017;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 290px;
-  }
-
-  .mock-titlebar {
-    background: #141822;
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 8px 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .mock-dots {
-    display: flex;
-    gap: 6px;
-  }
-
-  .mock-dots span {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: #2a3142;
-  }
-
-  .mock-tabs {
-    display: flex;
-    gap: 6px;
-    margin-left: 8px;
-  }
-
-  .mock-tab {
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    padding: 3px 10px;
-    background: transparent;
-    border-radius: var(--radius-sm);
-    color: var(--text-low);
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .mock-tab.active {
-    background: #0d1017;
-    color: var(--text-high);
-    border: 1px solid var(--border-subtle);
-    border-bottom-color: transparent;
-  }
-
-  .mock-editor {
-    padding: 16px;
-    font-family: var(--font-mono);
-    font-size: 13.5px;
-    line-height: 1.65;
-    color: var(--text-high);
-    flex: 1;
-    min-height: 160px;
-    overflow-y: auto;
-    position: relative;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .editor-prefix {
-    color: var(--text-low);
-  }
-
-  .editor-dictated {
-    color: #e2e8f0;
-  }
-
-  .blinking-cursor {
-    display: inline-block;
-    width: 8px;
-    height: 15px;
-    background: #3b82f6;
-    vertical-align: middle;
-    margin-left: 2px;
-    animation: blink 1s step-end infinite;
-  }
-
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-  }
-
-  /* The Floating Mini-Overlay (WS_EX_NOACTIVATE mimic) */
-  .sim-overlay-widget {
-    background: #1b1e25;
-    border: 1px solid #3a404c;
-    border-radius: 10px;
-    box-shadow: 0 12px 30px rgba(0,0,0,0.6);
-    overflow: hidden;
-    width: 100%;
-    max-width: 440px;
-    align-self: flex-end;
-    margin-top: auto;
-  }
-
-  .overlay-head {
-    background: #1e222a;
-    border-bottom: 1px solid #2b3140;
-    padding: 7px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 12px;
-  }
-
-  .overlay-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-  }
-
-  .overlay-status .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--lamp-red);
-  }
-
-  .overlay-status .dot.active {
-    background: var(--lamp-green);
-    box-shadow: 0 0 8px var(--lamp-green);
-  }
-
-  .overlay-meta {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-low);
-  }
-
-  .overlay-body {
-    padding: 8px 12px;
-    font-size: 12.5px;
-    color: #dfe4ec;
-    max-height: 110px;
-    overflow-y: auto;
-  }
-
-  .overlay-entry {
-    display: grid;
-    grid-template-columns: 20px 1fr;
-    gap: 8px;
-    padding: 3px 0;
-    line-height: 1.4;
-  }
-
-  .overlay-entry .idx {
-    font-family: var(--font-mono);
-    font-size: 10.5px;
-    color: var(--text-low);
-  }
-
-  .overlay-footer {
-    background: #161920;
-    border-top: 1px solid #242a38;
-    padding: 4px 12px;
-    font-size: 10.5px;
-    color: var(--text-low);
-    display: flex;
-    justify-content: space-between;
-  }
-
-  /* ------------------------------------------------------------- Specs Strip */
-  .strip-section {
-    padding: 24px 0;
-    border-bottom: 1px solid var(--border-subtle);
-    background: #0c0f16;
-  }
-
-  .specs-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 24px;
-  }
-
-  @media (max-width: 800px) {
-    .specs-grid { grid-template-columns: repeat(2, 1fr); }
-  }
-
-  .spec-item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    border-left: 2px solid var(--border-strong);
-    padding-left: 14px;
-  }
-
-  .spec-val {
-    font-family: var(--font-mono);
-    font-size: 20px;
-    font-weight: 700;
-    color: #ffffff;
-    letter-spacing: -0.02em;
-  }
-
-  .spec-lbl {
-    font-size: 12.5px;
-    color: var(--text-mid);
-    line-height: 1.4;
-  }
-
-  /* -------------------------------------------------------- Section Header */
-  .section-wrap {
-    padding: 68px 0;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
-  .sec-heading {
-    margin-bottom: 36px;
-  }
-
-  .sec-kicker {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--lamp-green);
-    margin-bottom: 8px;
-  }
-
-  h2.sec-title {
-    font-size: clamp(22px, 3vw, 32px);
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    color: #ffffff;
-    margin-bottom: 12px;
-  }
-
-  p.sec-desc {
-    font-size: 16px;
-    color: var(--text-mid);
-    max-width: 680px;
+  .lead {
+    margin: 0;
+    max-width: 49ch;
+    font-size: 17.5px;
     line-height: 1.6;
+    color: var(--ink-2);
   }
 
-  /* --------------------------------------------------- Engineering Deep Dive */
-  .deep-dive-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-  }
+  .meta { margin: 22px 0 0; font: 12.5px/1.7 var(--mono); color: var(--ink-3); }
 
-  @media (max-width: 860px) {
-    .deep-dive-grid { grid-template-columns: 1fr; }
-  }
+  /* ---------------------------------------------------------------- figure -- */
 
-  .tech-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 24px;
+  figure.shot { margin: 56px 0 0; }
+
+  .window {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    min-height: 268px;
+    overflow: hidden;
+    background: #181b20;
+    border: 1px solid #2b3037;
+    border-radius: 9px;
   }
 
-  .tech-card:hover {
-    border-color: var(--border-strong);
-  }
-
-  .card-top {
+  .winbar {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-  }
-
-  .card-top h3 {
-    font-size: 17px;
-    font-weight: 650;
-    color: #ffffff;
-    letter-spacing: -0.01em;
-  }
-
-  .card-badge {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 2px 7px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
-    border-radius: 4px;
-    color: var(--text-mid);
-  }
-
-  .tech-card p {
-    font-size: 14px;
-    color: var(--text-mid);
-    line-height: 1.6;
-  }
-
-  /* Code Callout within Cards */
-  .code-inline-block {
-    background: #090c12;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    padding: 12px 14px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: #cad5e2;
-    overflow-x: auto;
-    line-height: 1.7;
-  }
-
-  .code-inline-block .cm { color: #5f708c; }
-  .code-inline-block .fn { color: #60a5fa; }
-  .code-inline-block .kw { color: #f472b6; }
-  .code-inline-block .str { color: #34d399; }
-
-  /* ------------------------------------------------- Interactive Hook Tester */
-  .hook-demo-box {
-    background: #0a0d14;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    padding: 20px;
-    margin-top: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .hook-demo-controls {
-    display: flex;
-    gap: 12px;
     align-items: center;
-    flex-wrap: wrap;
-  }
-
-  .hook-input-area {
-    background: #141822;
-    border: 1px solid #2b3548;
-    border-radius: var(--radius-sm);
-    padding: 10px 14px;
-    font-family: var(--font-mono);
-    font-size: 13px;
-    color: var(--text-high);
-    flex: 1;
-    min-width: 220px;
-    outline: none;
-  }
-
-  .hook-input-area:focus {
-    border-color: #3b82f6;
-  }
-
-  .hook-status-badge {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 4px;
-    border: 1px solid var(--border-strong);
-    background: #11151f;
-    color: var(--text-mid);
-  }
-
-  /* ---------------------------------------------------- Text Cleanup Module */
-  .cleanup-playground {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    padding: 28px;
-    box-shadow: var(--shadow-window);
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .cleanup-cases-selector {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .cleanup-chip {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    padding: 5px 10px;
-    background: #151a25;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-sm);
-    color: var(--text-mid);
-    cursor: pointer;
-    transition: all 0.12s ease;
-  }
-
-  .cleanup-chip:hover {
-    background: #1e2636;
-    color: var(--text-high);
-  }
-
-  .cleanup-chip.active {
-    background: #253347;
-    border-color: #3b82f6;
-    color: #ffffff;
-  }
-
-  .cleanup-split {
-    display: grid;
-    grid-template-columns: 1fr 40px 1fr;
-    gap: 12px;
-    align-items: stretch;
-  }
-
-  @media (max-width: 768px) {
-    .cleanup-split {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  .cleanup-box {
-    background: #0d1017;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
     gap: 10px;
+    padding: 10px 14px;
+    background: #1c1f25;
+    border-bottom: 1px solid #262a30;
+    font: 12px var(--mono);
+    color: #8d949e;
   }
 
-  .cleanup-box-head {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-low);
+  .winbar .dots { display: flex; gap: 5px; }
+  .winbar .dots s { display: block; width: 8px; height: 8px; border-radius: 50%; background: #3a3f46; }
+  .winbar .name { margin-left: 4px; color: #c9ced6; }
+  .winbar .state { margin-left: auto; color: #6f7681; }
+
+  .winbody {
+    flex: 1;
+    padding: 24px 28px 76px;
+    font: 13.5px/1.85 var(--mono);
+    color: #c7ccd3;
+  }
+
+  .winbody p { margin: 0; }
+  .winbody p + p { margin-top: 12px; }
+  .winbody .dim { color: #6c737d; }
+  .winbody .current { margin-top: 18px; color: #dfe4eb; }
+
+  .caret {
+    display: inline-block;
+    width: 7px;
+    height: 15px;
+    margin-left: 2px;
+    vertical-align: -2px;
+    background: #8fd3a9;
+  }
+
+  .panelwrap {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -62px;
+    padding: 0 24px 0 24px;
+  }
+
+  .panel {
+    width: 340px;
+    max-width: 100%;
+    padding: 12px 14px;
+    color: #dfe3e8;
+    background: #1d2026;
+    border: 1px solid #33383f;
+    border-radius: 8px;
+    box-shadow: 0 16px 38px rgba(0, 0, 0, .18);
+  }
+
+  .panel-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font: 11.5px var(--mono);
+    color: #9aa2ac;
+  }
+
+  .panel-dot { width: 7px; height: 7px; border-radius: 50%; background: #46d07c; }
+
+  .panel-top .time { margin-left: auto; color: #8b929c; }
+
+  .panel-text { font: 14.5px/1.5 var(--sans); color: #f1f3f5; }
+
+  .panel-foot {
     display: flex;
     justify-content: space-between;
+    margin-top: 8px;
+    font: 11px var(--mono);
+    color: #7f8792;
   }
 
-  .cleanup-text-input {
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--text-high);
-    font-family: var(--font-mono);
-    font-size: 14px;
-    line-height: 1.6;
-    resize: none;
-    height: 90px;
-    width: 100%;
+  figcaption { margin-top: 16px; max-width: 60ch; font-size: 13px; color: var(--ink-3); }
+
+  /* -------------------------------------------------------------- sections -- */
+
+  section { padding: 64px 0; border-top: 1px solid var(--rule); }
+
+  .sec-head { max-width: 58ch; }
+
+  h2 {
+    margin: 0 0 14px;
+    font-size: clamp(1.3rem, 2.5vw, 1.6rem);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -.017em;
   }
 
-  .cleanup-arrow {
+  .sec-head p { margin: 0; font-size: 16px; color: var(--ink-2); }
+
+  .body { margin-top: 34px; }
+  .body > p { margin: 0 0 18px; max-width: 64ch; color: var(--ink-2); }
+
+  dl.rows { margin: 0; border-top: 1px solid var(--rule); }
+
+  dl.rows div {
     display: grid;
-    place-items: center;
-    color: var(--text-low);
-    font-size: 18px;
+    grid-template-columns: 12.5rem minmax(0, 1fr);
+    gap: 28px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--rule);
   }
 
-  .cleanup-result {
-    font-family: var(--font-mono);
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--lamp-green);
-    min-height: 90px;
-    white-space: pre-wrap;
-    word-break: break-word;
+  dl.rows dt { font: 500 13px/1.55 var(--mono); color: var(--ink); }
+  dl.rows dd { margin: 0; font-size: 15.5px; color: var(--ink-2); }
+
+  @media (max-width: 660px) {
+    dl.rows div { grid-template-columns: 1fr; gap: 6px; }
   }
 
-  .cleanup-explanation {
-    font-size: 12.5px;
-    color: var(--text-mid);
-    background: #090c12;
-    border-radius: 4px;
-    padding: 8px 12px;
-    border-left: 3px solid var(--lamp-green);
-  }
-
-  /* ---------------------------------------------------- Architecture Diagram */
-  .arch-diagram {
-    background: #090c12;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    padding: 24px;
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    color: #cbd5e1;
+  pre {
+    margin: 0;
+    max-width: 100%;
+    padding: 16px 18px;
     overflow-x: auto;
-    line-height: 1.8;
+    background: var(--wash);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    font: 13px/1.7 var(--mono);
   }
 
-  .arch-step {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    padding: 6px 0;
-    border-bottom: 1px dashed var(--border-subtle);
+  pre .c { color: var(--ink-3); }
+
+  code {
+    padding: 1px 5px;
+    background: var(--wash);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    font: 13.5px var(--mono);
   }
 
-  .arch-step:last-child {
-    border-bottom: none;
+  pre code, pre .c code { padding: 0; background: none; border: 0; }
+
+  .tablewrap { max-width: 100%; overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+
+  th, td {
+    padding: 11px 16px 11px 0;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--rule);
   }
 
-  .arch-badge {
-    padding: 2px 6px;
-    background: #161c28;
-    border: 1px solid var(--border-subtle);
-    border-radius: 3px;
-    font-size: 11px;
-    color: #60a5fa;
+  th {
+    font: 500 11.5px/1.4 var(--mono);
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
     white-space: nowrap;
   }
 
-  /* ------------------------------------------------- Real Benchmarks Table */
-  .table-responsive {
-    overflow-x: auto;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    background: var(--bg-surface);
-  }
+  td { color: var(--ink-2); }
+  td:first-child { color: var(--ink); font-weight: 500; }
 
-  table.data-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13.5px;
-    text-align: left;
-  }
+  .note { margin: 18px 0 0; max-width: 66ch; font-size: 13.5px; color: var(--ink-3); }
 
-  table.data-table th,
-  table.data-table td {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border-subtle);
-  }
+  /* --------------------------------------------------------------- install -- */
 
-  table.data-table th {
-    background: #0e121a;
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    letter-spacing: 0.05em;
-    color: var(--text-mid);
-    text-transform: uppercase;
-  }
+  .install { margin-top: 32px; border-top: 1px solid var(--rule); }
 
-  table.data-table tr:last-child td {
-    border-bottom: none;
-  }
-
-  table.data-table tr:hover td {
-    background: rgba(255, 255, 255, 0.02);
-  }
-
-  td.mono {
-    font-family: var(--font-mono);
-  }
-
-  /* -------------------------------------------------- System Tray Inspection */
-  .tray-showcase-grid {
+  .os {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
     align-items: start;
+    grid-template-columns: 17rem minmax(0, 1fr);
+    gap: 36px;
+    padding: 26px 0;
+    border-bottom: 1px solid var(--rule);
   }
 
-  @media (max-width: 860px) {
-    .tray-showcase-grid { grid-template-columns: 1fr; }
+  .os > * { min-width: 0; }
+
+  @media (max-width: 760px) {
+    .os { grid-template-columns: 1fr; gap: 14px; }
   }
 
-  .tray-mock-wrap {
-    background: #090c12;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    padding: 20px;
+  .os h3 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
+  .os .hint { margin: 0 0 16px; font-size: 13px; color: var(--ink-3); }
+
+  .os ol {
+    margin: 16px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+
+  .os li {
+    counter-increment: step;
+    position: relative;
+    margin-bottom: 12px;
+    padding-left: 22px;
+    font-size: 14px;
+    color: var(--ink-2);
+  }
+
+  .os li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    font: 11.5px/1.7 var(--mono);
+    color: var(--ink-3);
+  }
+
+  .os pre { padding: 16px 18px; font-size: 12.5px; }
+
+  /* ------------------------------------------------------------------- faq -- */
+
+  details { padding: 16px 0; border-bottom: 1px solid var(--rule); }
+  details:first-of-type { border-top: 1px solid var(--rule); }
+
+  summary {
     display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .tray-taskbar-bar {
-    background: #141720;
-    border: 1px solid #232836;
-    border-radius: 8px;
-    padding: 8px 14px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 16px;
-  }
-
-  .taskbar-clock {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-mid);
-  }
-
-  .interactive-tray-icon {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: #1b202c;
-    border: 1px solid #2e364a;
-    padding: 4px 8px;
-    border-radius: 6px;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .interactive-tray-icon:hover {
-    background: #252c3d;
-    border-color: #414d69;
-  }
-
-  .tray-popup-menu {
-    background: #1c202a;
-    border: 1px solid #3b4356;
-    border-radius: 8px;
-    box-shadow: 0 16px 36px rgba(0,0,0,0.6);
-    padding: 6px 0;
-    width: 250px;
-    font-size: 13px;
-    margin-left: auto;
-  }
-
-  .menu-item {
-    padding: 6px 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: var(--text-high);
-    cursor: pointer;
-  }
-
-  .menu-item:hover {
-    background: #272e3d;
-  }
-
-  .menu-item.disabled {
-    color: var(--text-low);
-    cursor: default;
-  }
-
-  .menu-divider {
-    height: 1px;
-    background: #2a3142;
-    margin: 5px 0;
-  }
-
-  /* ---------------------------------------------------------- Setup Guide */
-  .setup-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
-    border-bottom: 1px solid var(--border-subtle);
-    padding-bottom: 10px;
-  }
-
-  .setup-tab-btn {
-    font-family: var(--font-mono);
-    font-size: 13px;
-    padding: 6px 14px;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    color: var(--text-mid);
-    cursor: pointer;
-  }
-
-  .setup-tab-btn.active {
-    background: var(--bg-surface);
-    border-color: var(--border-strong);
-    color: #ffffff;
-    font-weight: 600;
-  }
-
-  .terminal-box {
-    background: #080a0f;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-  }
-
-  .terminal-bar {
-    background: #11141c;
-    border-bottom: 1px solid var(--border-subtle);
-    padding: 8px 14px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    color: var(--text-low);
-  }
-
-  .copy-btn {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    background: #1b212f;
-    border: 1px solid var(--border-strong);
-    color: var(--text-mid);
-    padding: 3px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .copy-btn:hover {
-    background: #252d40;
-    color: #ffffff;
-  }
-
-  pre.terminal-code {
-    padding: 18px 20px;
-    font-family: var(--font-mono);
-    font-size: 13px;
-    line-height: 1.85;
-    color: #d1d9e6;
-    overflow-x: auto;
-  }
-
-  pre.terminal-code .c { color: #5f708c; }
-  pre.terminal-code .cmd { color: #38bdf8; }
-  pre.terminal-code .out { color: #86efac; }
-
-  /* ------------------------------------------------------------------ FAQ */
-  .faq-list {
-    display: flex;
-    flex-direction: column;
     gap: 12px;
-  }
-
-  details.faq-item {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    padding: 0 20px;
-    transition: border-color 0.15s ease;
-  }
-
-  details.faq-item[open] {
-    border-color: var(--border-strong);
-  }
-
-  details.faq-item summary {
-    padding: 16px 0;
+    align-items: baseline;
     font-size: 15.5px;
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
     list-style: none;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: var(--text-high);
   }
 
-  details.faq-item summary::-webkit-details-marker {
-    display: none;
-  }
+  summary::-webkit-details-marker { display: none; }
 
-  details.faq-item summary::after {
+  summary::before {
     content: "+";
-    font-family: var(--font-mono);
-    font-size: 18px;
-    color: var(--text-low);
+    width: 10px;
+    flex: none;
+    font: 13px var(--mono);
+    color: var(--ink-3);
   }
 
-  details.faq-item[open] summary::after {
-    content: "−";
-    color: var(--lamp-green);
+  details[open] summary::before { content: "\2212"; }
+
+  details p { margin: 10px 0 0 22px; max-width: 64ch; font-size: 15px; color: var(--ink-2); }
+  details p + p { margin-top: 8px; }
+
+  /* ---------------------------------------------------------------- footer -- */
+
+  footer {
+    padding: 36px 0 56px;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+    color: var(--ink-3);
   }
 
-  .faq-body {
-    padding-bottom: 18px;
-    color: var(--text-mid);
-    font-size: 14.5px;
-    line-height: 1.65;
-  }
-
-  .faq-body code {
-    font-family: var(--font-mono);
-    font-size: 12.5px;
-    background: #090c12;
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid var(--border-subtle);
-    color: #e2e8f0;
-  }
-
-  /* --------------------------------------------------------------- Footer */
-  footer.site-footer {
-    padding: 48px 0;
-    background: #080a0f;
-    border-top: 1px solid var(--border-subtle);
-    font-size: 13.5px;
-    color: var(--text-low);
-  }
-
-  .footer-grid {
+  footer .wrap {
     display: flex;
+    align-items: flex-start;
     justify-content: space-between;
-    align-items: center;
+    gap: 32px;
     flex-wrap: wrap;
-    gap: 20px;
   }
+  footer p { margin: 0 0 6px; max-width: 52ch; }
+  footer a { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  footer a:hover { color: var(--ink); border-color: var(--ink-3); }
+  .flinks { display: flex; gap: 18px; flex-wrap: wrap; }
 
-  .footer-left {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .footer-nav {
-    display: flex;
-    gap: 20px;
-  }
-
-  .footer-nav a:hover {
-    color: var(--text-high);
-  }
-
-  /* Keyboard shortcut hint popup */
-  .toast-hint {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    background: #171c26;
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--text-mid);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-    z-index: 999;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    transition: opacity 0.3s ease, transform 0.3s ease;
-  }
-
-  .toast-hint.hidden {
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(12px);
-  }
+  :focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 </style>
 </head>
 <body>
 
-<!-- ------------------------------------------------------------- Top Spec Bar -->
-<div class="top-banner">
+<header class="site">
   <div class="wrap">
-    <div class="top-banner-specs">
-      <span><i class="status-pulse"></i> Model: Qwen3-ASR 1.7B / 0.6B</span>
-      <span>Network: HF_HUB_OFFLINE=1</span>
-      <span>Engine: PyTorch CPU / Arc XPU</span>
-      <span>Trigger: Mouse XButton2 (Forward) or Global Hotkey</span>
-    </div>
-    <div style="font-family: var(--font-mono); color: var(--text-low);">
-      Press <kbd class="keycap">Space</kbd> anywhere to test push-to-talk
-    </div>
-  </div>
-</div>
-
-<!-- ------------------------------------------------------------- Site Header -->
-<header class="site-header">
-  <div class="wrap navbar">
-    <div class="brand-group" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
-      <div class="traffic-light-mini" id="navTrafficLight" title="System Tray Status">
-        <div class="lamp red-on" id="navLampRed"></div>
-        <div class="lamp" id="navLampGreen"></div>
-      </div>
-      <div class="brand-title">
-        type4voices
-        <span class="ver">v1.2</span>
-      </div>
-    </div>
-
-    <nav class="nav-links">
-      <a href="#simulator">Interactive PTT</a>
-      <a href="#benchmarks">CPU Benchmarks</a>
-      <a href="#deepdive">Engineering</a>
-      <a href="#cleanup">Text Cleanup</a>
-      <a href="#setup">Install Guide</a>
-      <a href="#faq">FAQ</a>
+    <a class="brand" href="#top">
+      <span class="lamps" aria-hidden="true"><i class="red"></i><i></i></span>
+      type4voices
+    </a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="#faq">Questions</a>
+      <a href="https://github.com/jaxontan/type4voices">GitHub</a>
     </nav>
-
-    <div class="nav-actions">
-      <a href="#setup" class="btn btn-primary">
-        <span>Get Started</span>
-      </a>
-    </div>
   </div>
 </header>
 
-<main>
+<main id="top">
 
-  <!-- ------------------------------------------------------------ Hero Section -->
-  <section class="hero-section">
-    <div class="wrap">
-      <div class="hero-header">
-        <div class="tag-terminal">
-          <span class="dot-green"></span>
-          <span>Zero cloud · Zero telemetry · Audio never touches a network interface</span>
+  <div class="wrap hero">
+    <p class="kicker">Local dictation for Windows, macOS and Linux</p>
+    <h1>Hold a button. Talk. It types where the cursor is.</h1>
+    <p class="lead">
+      type4voices runs the Qwen3-ASR speech model on your own CPU. Audio stays on the
+      machine, dictation works with the network off, and the text is pasted into
+      whichever window has focus. The default trigger is the Forward mouse button.
+    </p>
+    <p class="meta">Python 3.10+ &middot; 4.4 GB model, downloaded once &middot; Apache-2.0 weights</p>
+
+    <figure class="shot">
+      <div class="window">
+        <div class="winbar">
+          <span class="dots" aria-hidden="true"><s></s><s></s><s></s></span>
+          <span class="name">notes.md</span>
+          <span class="state">caret in the editor</span>
         </div>
-        <h1 class="hero-title">
-          Hold your mouse side button.<br>
-          Speak. Release.<br>
-          Your words appear at the cursor.
-        </h1>
-        <p class="hero-lead">
-          Local voice typing for Windows, macOS, and Linux. Transcribed on your own processor
-          by <strong>Qwen3-ASR</strong> in about a second. Swallows the mouse event so browsers don't navigate,
-          cleans up numbers and spoken punctuation deterministically, and never steals window focus.
-        </p>
-      </div>
-
-      <!-- -------------------------------------------------------------------------
-           INTERACTIVE PUSH-TO-TALK WORKSTATION (Hero Simulator)
-           ------------------------------------------------------------------------- -->
-      <div class="sim-workstation" id="simulator">
-        
-        <!-- Controller Side (Left) -->
-        <div class="sim-controller">
-          <div class="controller-title">
-            <span>Hardware Controller</span>
-            <span id="controllerStateText" style="color: var(--lamp-red);">IDLE</span>
-          </div>
-
-          <!-- Dual Lamp Physical Chassis -->
-          <div class="traffic-light-chassis">
-            <div class="chassis-socket">
-              <div class="lamp-fixture">
-                <div class="lamp-bulb red active" id="chassisLampRed"></div>
-              </div>
-              <span class="lamp-label">Idle</span>
-            </div>
-            <div class="chassis-socket">
-              <div class="lamp-fixture">
-                <div class="lamp-bulb green" id="chassisLampGreen"></div>
-              </div>
-              <span class="lamp-label">Rec / Run</span>
-            </div>
-          </div>
-
-          <!-- Tactile Push Button -->
-          <button class="ptt-button" id="pttButton" aria-label="Push to talk button">
-            <div class="ptt-label">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-              <span>HOLD TO DICTATE</span>
-            </div>
-            <div class="ptt-sub" id="pttTimerLabel">Mouse Side 2 / Hold [Space]</div>
-          </button>
-
-          <!-- Waveform Scope -->
-          <div class="waveform-container">
-            <div class="waveform-header">
-              <span>AUDIO BUFFER</span>
-              <span id="waveformStats">16 kHz · 1 ch · float32</span>
-            </div>
-            <canvas id="waveformCanvas" width="300" height="48"></canvas>
-          </div>
-
-          <!-- Scenario Presets -->
-          <div class="presets-group">
-            <label>Dictation Scenario Presets</label>
-            <div class="preset-buttons">
-              <button class="preset-btn active" onclick="setScenario(0)">Git Commit</button>
-              <button class="preset-btn" onclick="setScenario(1)">Spoken Numbers</button>
-              <button class="preset-btn" onclick="setScenario(2)">Domain / Punctuation</button>
-              <button class="preset-btn" onclick="setScenario(3)">Slack / Email</button>
-            </div>
-          </div>
-
-          <!-- Optional Real Mic Toggle -->
-          <div class="mic-toggle-row">
-            <span>Browser mic capture:</span>
-            <button id="toggleRealMicBtn" onclick="toggleRealMic()">Enable Real Mic</button>
-          </div>
-        </div>
-
-        <!-- Host Screen Simulator Side (Right) -->
-        <div class="sim-screen">
-          <div class="mock-window-frame">
-            <div class="mock-titlebar">
-              <div class="mock-dots">
-                <span></span><span></span><span></span>
-              </div>
-              <div class="mock-tabs">
-                <div class="mock-tab active" id="mockAppTab">VS Code — commit_msg.txt</div>
-              </div>
-              <div style="margin-left: auto; font-family: var(--font-mono); font-size: 11px; color: var(--text-low);" id="mockAppStatus">
-                Target has keyboard focus
-              </div>
-            </div>
-
-            <div class="mock-editor" id="mockEditor">
-<span class="editor-prefix">// Cursor is focused in your active window.
-// Hold the button, speak, and watch it paste instantly:</span>
-
-<span class="editor-dictated" id="editorDictated"></span><span class="blinking-cursor" id="blinkingCursor"></span>
-            </div>
-          </div>
-
-          <!-- Realistic Mini Overlay (WS_EX_NOACTIVATE Window) -->
-          <div class="sim-overlay-widget" id="simOverlayWidget">
-            <div class="overlay-head">
-              <div class="overlay-status">
-                <span class="dot" id="overlayDot"></span>
-                <span id="overlayTitle">Idle</span>
-              </div>
-              <span class="overlay-meta" id="overlayMeta">auto_clipboard: on</span>
-            </div>
-            <div class="overlay-body" id="overlayBody">
-              <div class="overlay-entry">
-                <span class="idx">1</span>
-                <span>Ready. Hold shortcut to dictate.</span>
-              </div>
-            </div>
-            <div class="overlay-footer">
-              <span>WS_EX_NOACTIVATE (focus never lost)</span>
-              <span>Click for history</span>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- ------------------------------------------------------------- Specs Strip -->
-  <div class="strip-section">
-    <div class="wrap">
-      <div class="specs-grid">
-        <div class="spec-item">
-          <span class="spec-val">0 bytes</span>
-          <span class="spec-lbl">Network traffic. Hugging Face offline mode is permanently enforced.</span>
-        </div>
-        <div class="spec-item">
-          <span class="spec-val">~1.1× realtime</span>
-          <span class="spec-lbl">Inference speed on regular CPU (2s speech pastes in ~3.0s).</span>
-        </div>
-        <div class="spec-item">
-          <span class="spec-val">100% swallowed</span>
-          <span class="spec-lbl">Low-level mouse hook intercepts Forward click before the browser navigates.</span>
-        </div>
-        <div class="spec-item">
-          <span class="spec-val">Zero focus loss</span>
-          <span class="spec-lbl">The transcript panel uses non-activating OS flags so paste targets never lose cursor.</span>
+        <div class="winbody">
+          <p class="dim">## Friday</p>
+          <p class="dim">Tested the installer on the old laptop, it still works.</p>
+          <p class="current">Ship the build after lunch and tell everyone it is live<span class="caret" aria-hidden="true"></span></p>
         </div>
       </div>
-    </div>
+      <div class="panelwrap">
+        <div class="panel">
+          <div class="panel-top">
+            <span class="panel-dot" aria-hidden="true"></span>
+            <span>Transcribed</span>
+            <span class="time">0:03</span>
+          </div>
+          <div class="panel-text">Ship the build after lunch and tell everyone it is live.</div>
+          <div class="panel-foot">
+            <span>click for history</span>
+            <span>on clipboard</span>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        The strip shows the timer while you talk, then what it heard. It is painted with
+        non-activating window flags, so the editor keeps the caret and the paste lands
+        in the right place.
+      </figcaption>
+    </figure>
   </div>
 
-  <!-- ------------------------------------------------- Real Engineering Details -->
-  <section class="section-wrap" id="deepdive">
+  <section>
     <div class="wrap">
-      <div class="sec-heading">
-        <div class="sec-kicker">Systems Engineering</div>
-        <h2 class="sec-title">How desktop dictation actually works without cloud APIs.</h2>
-        <p class="sec-desc">
-          Most voice apps wrap an external cloud STT API in an Electron browser shell.
-          <code>type4voices</code> is written in native Python with low-level OS hooks, PortAudio ring-buffers,
-          and in-process PyTorch inference.
-        </p>
+      <div class="sec-head">
+        <h2>What it does</h2>
+        <p>Every item below is a setting in <code>config.json</code>, an entry in the tray menu, or both.</p>
       </div>
 
-      <div class="deep-dive-grid">
-        
-        <!-- Card 1: Low-Level Hook Swallowing -->
-        <div class="tech-card">
-          <div class="card-top">
-            <h3>1. Event Swallowing (WH_MOUSE_LL)</h3>
-            <span class="card-badge">trigger.py</span>
-          </div>
-          <p>
-            If you map your mouse's Forward button (XButton2) using conventional listeners, Windows will still
-            pass the event to your browser, accidentally navigating forward in your history.
-            <code>type4voices</code> installs a genuine <code>WH_MOUSE_LL</code> Windows hook that consumes the
-            event at kernel dispatch, returning <code>1</code> to swallow it completely.
-          </p>
-          <div class="code-inline-block">
-<span class="kw">def</span> <span class="fn">_low_level_mouse_proc</span>(nCode, wParam, lParam):
-    <span class="kw">if</span> nCode >= 0:
-        btn = _decode_xbutton(lParam)
-        <span class="kw">if</span> btn == target_button:
-            <span class="fn">_dispatch_async</span>(wParam)  <span class="cm"># never blocks hook</span>
-            <span class="kw">return</span> 1  <span class="cm"># SWALLOW: browser never navigates</span>
-    <span class="kw">return</span> CallNextHookEx(<span class="kw">None</span>, nCode, wParam, lParam)
-          </div>
-        </div>
-
-        <!-- Card 2: WS_EX_NOACTIVATE Window -->
-        <div class="tech-card">
-          <div class="card-top">
-            <h3>2. Non-Activating Focus Guard</h3>
-            <span class="card-badge">overlay.py</span>
-          </div>
-          <p>
-            When synthetic keystrokes (like <kbd class="keycap">Ctrl+V</kbd> or <kbd class="keycap">Cmd+V</kbd>) are fired,
-            they land in whichever window has OS keyboard focus. If your transcript overlay window takes focus for even
-            1 millisecond, the paste drops into the void. <code>type4voices</code> applies 
-            <code>WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW</code> on Windows and non-activating <code>NSPanel</code> on macOS.
-          </p>
-          <div class="code-inline-block">
-<span class="cm"># Win32 window creation: never steal focus</span>
-style = GetWindowLong(hwnd, GWL_EXSTYLE)
-SetWindowLong(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW)
-SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
-          </div>
-        </div>
-
-        <!-- Card 3: Model Caching & Offline Lock -->
-        <div class="tech-card">
-          <div class="card-top">
-            <h3>3. Strict Network Isolation</h3>
-            <span class="card-badge">MODEL_NOTES.md</span>
-          </div>
-          <p>
-            The model weights (Qwen3-ASR-1.7B, ~4.4 GB or 0.6B, ~1.2 GB) download once via <code>download_model.py</code>.
-            Once cached, <code>dictate.py</code> boots with:
-          </p>
-          <div class="code-inline-block">
-os.environ[<span class="str">"HF_HUB_OFFLINE"</span>] = <span class="str">"1"</span>
-os.environ[<span class="str">"TRANSFORMERS_OFFLINE"</span>] = <span class="str">"1"</span>
-os.environ[<span class="str">"HF_HUB_DISABLE_TELEMETRY"</span>] = <span class="str">"1"</span>
-          </div>
-          <p>
-            Any attempt by underlying libraries to check for updates or phone home causes an immediate local error
-            instead of transmitting metadata.
-          </p>
-        </div>
-
-        <!-- Card 4: Queue Architecture -->
-        <div class="tech-card">
-          <div class="card-top">
-            <h3>4. Serialization & Audio Pipeline</h3>
-            <span class="card-badge">dictate.py</span>
-          </div>
-          <p>
-            Sound frames arrive at 16,000 Hz float32 from PortAudio. Short clicks under <code>min_seconds</code> (1.0s)
-            are discarded to eliminate accidental mic clicks. Transcriptions queue through a single worker thread so rapid
-            dictations never compete for CPU inference cores.
-          </p>
-          <div class="code-inline-block">
-16kHz Audio Stream ──> Ring Buffer ──> Trim Silence (RMS threshold)
-     │
-     └──> Job Queue (FIFO) ──> Qwen3-ASR CPU Model ──> text_cleanup()
-                                                            │
-                                  Paste (Ctrl+V) <──────────┘
-          </div>
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- ------------------------------------------------ Deterministic Text Cleanup -->
-  <section class="section-wrap" id="cleanup">
-    <div class="wrap">
-      <div class="sec-heading">
-        <div class="sec-kicker">text_cleanup.py</div>
-        <h2 class="sec-title">Deterministic post-processing. No hallucinating LLMs.</h2>
-        <p class="sec-desc">
-          Instead of running a heavy language model that might rephrase your thoughts or introduce latency,
-          <code>type4voices</code> runs a sub-millisecond rule engine with 63 comprehensive unit tests.
-        </p>
-      </div>
-
-      <div class="cleanup-playground">
+      <dl class="rows">
         <div>
-          <span style="font-family: var(--font-mono); font-size: 11.5px; color: var(--text-low); text-transform: uppercase;">
-            Select real unit-test cases from test_text_cleanup.py:
-          </span>
-          <div class="cleanup-cases-selector" style="margin-top: 8px;">
-            <button class="cleanup-chip active" onclick="setCleanupCase(0)">Spoken numbers &amp; scale</button>
-            <button class="cleanup-chip" onclick="setCleanupCase(1)">Domain dot com &amp; version</button>
-            <button class="cleanup-chip" onclick="setCleanupCase(2)">Spoken punctuation &amp; newline</button>
-            <button class="cleanup-chip" onclick="setCleanupCase(3)">Noun 'dot' protection</button>
-            <button class="cleanup-chip" onclick="setCleanupCase(4)">Filler word stripping</button>
-          </div>
+          <dt>The trigger</dt>
+          <dd>Hold the shortcut to record, let go to transcribe. A tap shorter than a second is ignored, and a recording stops itself at two minutes.</dd>
         </div>
-
-        <div class="cleanup-split">
-          <div class="cleanup-box">
-            <div class="cleanup-box-head">
-              <span>RAW SPEECH RECOGNITION (Input)</span>
-              <span>Edit to test</span>
-            </div>
-            <textarea class="cleanup-text-input" id="cleanupInput" oninput="runLiveCleanup()"></textarea>
-          </div>
-
-          <div class="cleanup-arrow">➔</div>
-
-          <div class="cleanup-box">
-            <div class="cleanup-box-head">
-              <span>POST-PROCESSED CLIPBOARD (Output)</span>
-              <span id="cleanupTiming">0.8 ms</span>
-            </div>
-            <div class="cleanup-result" id="cleanupOutput"></div>
-          </div>
+        <div>
+          <dt>The lamps</dt>
+          <dd>The tray icon is two lamps. Green while recording or transcribing, red while idle, both dark while paused. You can see whether the microphone is open without opening a window.</dd>
         </div>
-
-        <div class="cleanup-explanation" id="cleanupRuleNote">
-          Rule: Cardinal and scale numbers are converted to digit sequences without disturbing context words.
+        <div>
+          <dt>The panel</dt>
+          <dd>Small strip in the corner: timer first, transcript after. Click it for the history, right-click to copy the whole history. It never takes keyboard focus.</dd>
         </div>
-      </div>
+        <div>
+          <dt>The clipboard</dt>
+          <dd>Each transcript stays on the clipboard after it is pasted. Left-click the tray icon to see the last five clipboard entries, then click one to copy it back.</dd>
+        </div>
+        <div>
+          <dt>The cleanup</dt>
+          <dd>Spoken numbers and punctuation become characters and filler words are dropped before the paste. Rules, not a second model, with about sixty unit tests behind them.</dd>
+        </div>
+        <div>
+          <dt>The recorder</dt>
+          <dd>Tray &rarr; Shortcut &rarr; Detect a new shortcut, then press what you want: a mouse button, F8, or something like Ctrl+Alt+J. It applies immediately, no restart.</dd>
+        </div>
+        <div>
+          <dt>The suppression</dt>
+          <dd>On Windows the shortcut is swallowed before the focused app sees it, so the side button stops navigating your browser. macOS and Linux can only observe it, which the platform table below explains.</dd>
+        </div>
+      </dl>
     </div>
   </section>
 
-  <!-- ---------------------------------------------------- Real Benchmarks Table -->
-  <section class="section-wrap" id="benchmarks">
+  <section id="how">
     <div class="wrap">
-      <div class="sec-heading">
-        <div class="sec-kicker">Real Hardware Profiling</div>
-        <h2 class="sec-title">Measured CPU latency on real hardware.</h2>
-        <p class="sec-desc">
-          Benchmarked on an Intel Core Ultra 5 228V laptop (Arc 130V, 31.5 GB RAM, Python 3.12, PyTorch CPU backend).
-          No cherry-picked cloud GPU numbers.
+      <div class="sec-head">
+        <h2>One process on your computer, no server</h2>
+        <p>
+          The same Python runs on all three systems. The differences live in
+          <code>platform_support.py</code>: paste chord, clipboard tool, panel flags and
+          autostart. On Windows, <code>trigger.py</code> installs low-level hooks so the
+          shortcut can be swallowed. The other two use a pynput listener and leave the
+          original event alone.
         </p>
       </div>
 
-      <div class="table-responsive">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Audio Duration</th>
-              <th>Time to Paste</th>
-              <th>Realtime Factor</th>
-              <th>Pipeline Breakdown</th>
-              <th>Target Memory</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="mono"><strong>1.0 s</strong> (short sentence)</td>
-              <td class="mono">~1.6 s</td>
-              <td class="mono">~1.6×</td>
-              <td>Audio capture + 1.2s inference + 0.1s paste delay</td>
-              <td class="mono">~4.4 GB (1.7B) / 1.2 GB (0.6B)</td>
-            </tr>
-            <tr>
-              <td class="mono"><strong>2.0 s</strong> (standard clause)</td>
-              <td class="mono">~3.0 s</td>
-              <td class="mono">~1.5×</td>
-              <td>Full Mel spectrogram extraction + acoustic decoding</td>
-              <td class="mono">Shared CPU system RAM</td>
-            </tr>
-            <tr>
-              <td class="mono"><strong>4.0 s</strong> (full sentence)</td>
-              <td class="mono">~4.5 s</td>
-              <td class="mono">~1.1×</td>
-              <td>Streaming feature chunking + text postprocessing</td>
-              <td class="mono">Shared CPU system RAM</td>
-            </tr>
-            <tr>
-              <td class="mono"><strong>First process cold start</strong></td>
-              <td class="mono">+25 – 40 s</td>
-              <td class="mono">—</td>
-              <td>Dominated by one-time PyTorch &amp; Transformers import</td>
-              <td class="mono">Eliminated via background daemon</td>
-            </tr>
-            <tr>
-              <td class="mono"><strong>Model load (warm imports)</strong></td>
-              <td class="mono">5.4 s</td>
-              <td class="mono">—</td>
-              <td>Weights mmap &amp; tensor allocation</td>
-              <td class="mono">Resident in background</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <div class="body">
+        <pre><span class="c"># one dictation, start to finish</span>
+shortcut down   <span class="c">recording starts, audio frames go to a buffer</span>
+shortcut up     <span class="c">silence trimmed, duration checked, job queued</span>
+worker thread   <span class="c">transcribe, clean up the text, paste into the focused window</span>
+clipboard watch <span class="c">new transcript added to the left-click history</span></pre>
 
-      <div style="margin-top: 16px; font-family: var(--font-mono); font-size: 12.5px; color: var(--text-mid); background: #0c1017; padding: 12px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);">
-        💡 <strong>Speedup Tip:</strong> Installing the Intel XPU build of PyTorch (<code>torch==2.15.0 --index-url https://download.pytorch.org/whl/xpu</code>) offloads compute to the integrated Intel Arc GPU, delivering ~0.7× realtime factor.
+        <div class="tablewrap" style="margin-top: 34px;">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col">Windows</th>
+                <th scope="col">macOS</th>
+                <th scope="col">Linux (X11)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Shortcut</td>
+                <td>low-level hooks, event swallowed</td>
+                <td>pynput listener, seen by other apps</td>
+                <td>pynput listener, seen by other apps</td>
+              </tr>
+              <tr>
+                <td>Paste chord</td>
+                <td>Ctrl+V</td>
+                <td>Cmd+V</td>
+                <td>Ctrl+V</td>
+              </tr>
+              <tr>
+                <td>Clipboard</td>
+                <td>pyperclip</td>
+                <td>pyperclip</td>
+                <td>wl-copy, xclip or xsel</td>
+              </tr>
+              <tr>
+                <td>Panel</td>
+                <td>WS_EX_NOACTIVATE window</td>
+                <td>non-activating NSPanel</td>
+                <td>Tk dock window</td>
+              </tr>
+              <tr>
+                <td>Autostart</td>
+                <td>HKCU Run key</td>
+                <td>LaunchAgent plist</td>
+                <td>~/.config/autostart</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          Only one transcription runs at a time, so quick dictations queue instead of
+          fighting for the CPU. The tray icon appears before the model finishes loading.
+        </p>
       </div>
     </div>
   </section>
 
-  <!-- ------------------------------------------------ System Tray & Hotkey Inspector -->
-  <section class="section-wrap" id="tray">
+  <section id="install">
     <div class="wrap">
-      <div class="sec-heading">
-        <div class="sec-kicker">Tray &amp; Shortcut Detector</div>
-        <h2 class="sec-title">Two lamps. No guessing if it's still listening.</h2>
-        <p class="sec-desc">
-          Spinners and glowing borders leave you wondering whether you're being recorded.
-          <code>type4voices</code> uses a physical two-lamp traffic light right in the system tray.
+      <div class="sec-head">
+        <h2>Set up once, then work offline</h2>
+        <p>
+          You need Python 3.10 or newer, a microphone, and about 6 GB of disk, most of it
+          the model. Everything installs into <code>.venv</code> at the top of the folder,
+          whichever system you are on.
         </p>
       </div>
 
-      <div class="tray-showcase-grid">
-        
-        <!-- Interactive Tray Widget -->
-        <div class="tray-mock-wrap">
-          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-low); text-transform: uppercase;">
-            Interactive Taskbar Tray (Click the icon or menu items)
-          </span>
-
-          <div class="tray-taskbar-bar">
-            <span style="font-size: 12px; color: var(--text-low);">Notification area</span>
-            <div class="interactive-tray-icon" id="interactiveTrayIcon" onclick="toggleTrayMenu()" title="Click to open menu">
-              <div class="traffic-light-mini" style="width: 14px; height: 24px; padding: 2px;">
-                <div class="lamp red-on" id="mockTrayRed" style="width: 8px; height: 8px;"></div>
-                <div class="lamp" id="mockTrayGreen" style="width: 8px; height: 8px;"></div>
-              </div>
-              <span style="font-family: var(--font-mono); font-size: 11.5px; color: #ffffff;">dictate.py</span>
-            </div>
-            <div class="taskbar-clock">16:20</div>
+      <div class="install">
+        <div class="os">
+          <div>
+            <h3>Windows</h3>
+            <p class="hint">Python 3.12 from python.org, PATH enabled</p>
+            <ol>
+              <li>Run the setup file once. It creates the environment and installs the pinned packages.</li>
+              <li>Download the weights. That is the only step that needs internet.</li>
+              <li>Start it, then pin the tray icon to the taskbar so it stays visible.</li>
+            </ol>
           </div>
+          <pre>windows\setup.bat
 
-          <!-- Tray Popup Menu Simulation -->
-          <div class="tray-popup-menu" id="trayContextMenu">
-            <div class="menu-item disabled" style="font-family: var(--font-mono); font-size: 11px; color: var(--text-low);">
-              type4voices · Idle (Red)
-            </div>
-            <div class="menu-divider"></div>
-            <div class="menu-item" onclick="alertSim('Shortcut changed to mouse:x2 (Forward button)')">
-              <span>Shortcut: Mouse X2 (Forward)</span>
-              <kbd class="keycap">Default</kbd>
-            </div>
-            <div class="menu-item" onclick="triggerDetectShortcutModal()">
-              <span>Detect a new shortcut…</span>
-              <kbd class="keycap">Press</kbd>
-            </div>
-            <div class="menu-item" onclick="alertSim('Language pinned to English (US)')">
-              <span>Language: Auto (52 langs)</span>
-            </div>
-            <div class="menu-divider"></div>
-            <div class="menu-item" onclick="alertSim('Last transcript copied to clipboard!')">
-              <span>Copy last transcript</span>
-            </div>
-            <div class="menu-item" onclick="alertSim('Re-pasting last transcript at cursor...')">
-              <span>Re-paste last transcript</span>
-            </div>
-            <div class="menu-item" onclick="alertSim('Opening last_recording.wav in system player')">
-              <span>Open last recording WAV</span>
-            </div>
-            <div class="menu-divider"></div>
-            <div class="menu-item" onclick="alertSim('Opening config.json in default editor')">
-              <span>Open config.json</span>
-            </div>
-            <div class="menu-item" onclick="alertSim('Running dictate.py --doctor diagnostics...')">
-              <span>Run Doctor diagnostics</span>
-            </div>
-          </div>
+.venv\Scripts\python.exe download_model.py
 
-          <div style="font-size: 12px; color: var(--text-mid); line-height: 1.5;">
-            <strong>Left-Click:</strong> Opens the 5-item clipboard history stack.<br>
-            <strong>Right-Click:</strong> Opens the context menu to configure hotwords, shortcuts, and languages.
-          </div>
+windows\run_dictate.bat              <span class="c"># console window</span>
+windows\run_dictate_background.vbs   <span class="c"># no console</span></pre>
         </div>
 
-        <!-- Shortcut Recorder Demonstration -->
-        <div class="tray-mock-wrap">
-          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-low); text-transform: uppercase;">
-            Live Shortcut Recorder &amp; Safety Validator
-          </span>
-
-          <p style="font-size: 13.5px; color: var(--text-mid);">
-            Click inside the box below and press any key combination or mouse button to test how <code>capture.py</code> and <code>shortcuts.py</code> validate triggers:
-          </p>
-
-          <div class="hook-demo-box">
-            <input type="text" class="hook-input-area" id="keyTestInput" placeholder="Click here and press hotkey (e.g. F8, Ctrl+Alt+J)..." onkeydown="testKeyInput(event)">
-            <div class="hook-status-badge" id="keyValidationResult">
-              Awaiting key event...
-            </div>
+        <div class="os">
+          <div>
+            <h3>macOS</h3>
+            <p class="hint">Python 3.12 from python.org, the system one has no tkinter</p>
+            <ol>
+              <li>Run setup in the <code>macos</code> folder, or double-click <code>run_dictate.command</code> later if you prefer Finder.</li>
+              <li>Allow Microphone, Accessibility and Input Monitoring when macOS asks, then restart the app.</li>
+              <li>Turn Handoff off if you do not want dictated text reaching your other Apple devices.</li>
+            </ol>
           </div>
+          <pre>cd macos
+chmod +x *.sh run_dictate.command
+./setup.sh
+cd ..
 
-          <div style="font-size: 12px; color: var(--text-mid); line-height: 1.6;">
-            <strong>Deliberate Guard:</strong> Bare single letters (e.g. pressing <kbd class="keycap">J</kbd> alone) are refused on purpose so you never hijack your normal typing. Function keys (<kbd class="keycap">F8</kbd>), navigation keys (<kbd class="keycap">Pause</kbd>), and chords (<kbd class="keycap">Ctrl+Alt+J</kbd>) are accepted instantly.
-          </div>
+.venv/bin/python download_model.py
+./macos/run_dictate.sh</pre>
         </div>
 
-      </div>
-
-      <!-- Real Windows 11 Tray & Taskbar Previews -->
-      <div style="margin-top: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 18px; display: flex; flex-direction: column; gap: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-low); text-transform: uppercase;">Real Screenshot: System Tray States</span>
-            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-mid);">tray_states.png</span>
+        <div class="os">
+          <div>
+            <h3>Linux</h3>
+            <p class="hint">X11 session, Python 3.11+, PortAudio</p>
+            <ol>
+              <li>Install the system packages, then run setup in the <code>linux</code> folder.</li>
+              <li>Log in to X11 or Xorg. Wayland blocks global hooks, synthetic keystrokes and tray icons for ordinary applications.</li>
+              <li>Use <code>xclip</code>, <code>xsel</code> or, on Wayland, <code>wl-clipboard</code> for clipboard access.</li>
+            </ol>
           </div>
-          <img src="tray_states.png" alt="Taskbar tray traffic light states: Red Idle, Green Recording, Dark Paused" style="width: 100%; border-radius: 6px; border: 1px solid var(--border-subtle); display: block;" onerror="this.style.display='none'">
-          <span style="font-size: 12px; color: var(--text-mid);">
-            Red = idle and loaded; Green = microphone active / model decoding; Dark = paused (releases microphone).
-          </span>
-        </div>
+          <pre>sudo apt install python3 python3-venv \
+  python3-tk libportaudio2 xclip
 
-        <div style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 18px; display: flex; flex-direction: column; gap: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-low); text-transform: uppercase;">Real Screenshot: Taskbar Pinning &amp; Notifications</span>
-            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-mid);">taskbar_states.png</span>
-          </div>
-          <img src="taskbar_states.png" alt="Windows 11 Taskbar notification area showing Voice Dictation icon" style="width: 100%; border-radius: 6px; border: 1px solid var(--border-subtle); display: block;" onerror="this.style.display='none'">
-          <span style="font-size: 12px; color: var(--text-mid);">
-            Drag onto the taskbar from the <code>^</code> overflow or promote under Windows 11 Taskbar settings for permanent visibility.
-          </span>
+cd linux
+chmod +x *.sh
+./setup.sh
+cd ..
+
+.venv/bin/python download_model.py
+./linux/run_dictate.sh</pre>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ------------------------------------------------ Installation & Setup Guide -->
-  <section class="section-wrap" id="setup">
+  <section>
     <div class="wrap">
-      <div class="sec-heading">
-        <div class="sec-kicker">Installation</div>
-        <h2 class="sec-title">Five minutes once. Offline forever.</h2>
-        <p class="sec-desc">
-          No signups, no API keys, no monthly fees. Clone or copy the folder, run setup once to download model weights, and run it.
+      <div class="sec-head">
+        <h2>How long a paste takes on a laptop CPU</h2>
+        <p>
+          Measured on an Intel Core Ultra 5 228V, 31 GB of RAM, CPU inference through
+          PyTorch. These are numbers from one machine, not a benchmark suite.
         </p>
       </div>
 
-      <div class="setup-tabs">
-        <button class="setup-tab-btn active" onclick="setSetupTab('win')">Windows 11 / 10</button>
-        <button class="setup-tab-btn" onclick="setSetupTab('mac')">macOS (Apple Silicon &amp; Intel)</button>
-        <button class="setup-tab-btn" onclick="setSetupTab('linux')">Linux (X11 / Xorg)</button>
-      </div>
-
-      <!-- Windows Terminal -->
-      <div class="terminal-box" id="tabContentWin">
-        <div class="terminal-bar">
-          <span>PowerShell / Command Prompt</span>
-          <button class="copy-btn" onclick="copySetupCode('win')">Copy Commands</button>
+      <div class="body">
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">What you say</th>
+                <th scope="col">Time to paste</th>
+                <th scope="col">Roughly</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>2 seconds</td><td>about 3 s</td><td>1.5 times realtime</td></tr>
+              <tr><td>4 seconds</td><td>about 4.5 s</td><td>1.1 times realtime</td></tr>
+              <tr><td>First start of the day</td><td>about 45 s before the first dictation</td><td>importing torch and transformers</td></tr>
+            </tbody>
+          </table>
         </div>
-        <pre class="terminal-code" id="codeWin"><span class="c"># 1. Install Python 3.12 (check "Add python.exe to PATH")</span>
-<span class="c"># 2. Run automated setup (creates .venv and installs dependencies)</span>
-<span class="cmd">windows\setup.bat</span>
-
-<span class="c"># 3. Download the Qwen3-ASR model once (4.4 GB, cached locally)</span>
-<span class="cmd">.venv\Scripts\python.exe download_model.py</span>
-
-<span class="c"># 4. Start foreground console or invisible background daemon</span>
-<span class="cmd">windows\run_dictate.bat</span>            <span class="c"># with console log</span>
-<span class="cmd">windows\run_dictate_background.vbs</span> <span class="c"># silent tray only</span>
-
-<span class="c"># 5. Verify microphone, model weights, and low-level hook</span>
-<span class="cmd">.venv\Scripts\python.exe dictate.py --doctor</span></pre>
+        <p class="note">
+          Later starts take a few seconds, and a background instance stays warm all day.
+          The model loads once and sits in RAM: 4.4 GB for the 1.7B model, 1.2 GB for the
+          0.6B one. Installing the XPU build of torch moves inference to an Intel Arc GPU
+          if you have one.
+        </p>
       </div>
-
-      <!-- macOS Terminal -->
-      <div class="terminal-box" id="tabContentMac" style="display: none;">
-        <div class="terminal-bar">
-          <span>Terminal (macOS zsh)</span>
-          <button class="copy-btn" onclick="copySetupCode('mac')">Copy Commands</button>
-        </div>
-        <pre class="terminal-code" id="codeMac"><span class="c"># 1. Install official Python 3.12 from python.org (has tkinter)</span>
-<span class="c"># 2. Make scripts executable and run setup</span>
-<span class="cmd">cd macos</span>
-<span class="cmd">chmod +x setup.sh run_dictate.sh run_dictate_background.sh run_dictate.command</span>
-<span class="cmd">./setup.sh</span>
-
-<span class="c"># 3. Download model weights once</span>
-<span class="cmd">cd ..</span>
-<span class="cmd">.venv/bin/python download_model.py</span>
-
-<span class="c"># 4. Start daemon (grants Accessibility &amp; Input Monitoring when prompted)</span>
-<span class="cmd">./macos/run_dictate.sh</span></pre>
-      </div>
-
-      <!-- Linux Terminal -->
-      <div class="terminal-box" id="tabContentLinux" style="display: none;">
-        <div class="terminal-bar">
-          <span>Bash (Ubuntu / Debian / Fedora X11)</span>
-          <button class="copy-btn" onclick="copySetupCode('linux')">Copy Commands</button>
-        </div>
-        <pre class="terminal-code" id="codeLinux"><span class="c"># 1. Install system prerequisites (PortAudio, Tkinter, xclip)</span>
-<span class="cmd">sudo apt install python3 python3-venv python3-tk libportaudio2 xclip</span>
-
-<span class="c"># 2. Setup environment and download weights</span>
-<span class="cmd">cd linux</span>
-<span class="cmd">chmod +x setup.sh run_dictate.sh run_dictate_background.sh</span>
-<span class="cmd">./setup.sh</span>
-<span class="cmd">cd ..</span>
-<span class="cmd">.venv/bin/python download_model.py</span>
-
-<span class="c"># 3. Log into X11 session (Wayland blocks global hooks and synthetic keystrokes)</span>
-<span class="cmd">./linux/run_dictate.sh</span></pre>
-      </div>
-
     </div>
   </section>
 
-  <!-- ------------------------------------------------------------- FAQ Section -->
-  <section class="section-wrap" id="faq">
+  <section id="faq">
     <div class="wrap">
-      <div class="sec-heading">
-        <div class="sec-kicker">Technical FAQ</div>
-        <h2 class="sec-title">Common developer questions.</h2>
+      <div class="sec-head">
+        <h2>Questions</h2>
       </div>
 
-      <div class="faq-list">
-        
-        <details class="faq-item" open>
-          <summary>Does my voice or transcript ever leave my machine?</summary>
-          <div class="faq-body">
-            No. The application runs with <code>HF_HUB_OFFLINE=1</code> and <code>TRANSFORMERS_OFFLINE=1</code> locked at the Python process root. Audio frames are held in memory as float32 NumPy arrays, fed directly into the local Qwen3-ASR model, and converted to text in RAM. You can inspect the network connections with Wireshark or NetLimiter: once the model is downloaded, zero network sockets are opened.
-          </div>
+      <div style="margin-top: 30px;">
+        <details open>
+          <summary>Does my voice or my text leave the machine?</summary>
+          <p>No. The model is downloaded once by <code>download_model.py</code>, and from then on the app runs with <code>HF_HUB_OFFLINE=1</code> and <code>TRANSFORMERS_OFFLINE=1</code>. Audio sits in memory as float32 frames, goes into the local model, and comes back as text.</p>
         </details>
 
-        <details class="faq-item">
-          <summary>Why does the mouse Forward button not trigger browser back/forward?</summary>
-          <div class="faq-body">
-            On Windows, <code>trigger.py</code> installs a native <code>WH_MOUSE_LL</code> callback via the Windows API. When the mouse side button (XButton2) is detected, the callback handles the recording state machine and returns non-zero (<code>1</code>). This consumes the message from the Windows message pump, preventing it from reaching Chrome, Edge, or Firefox.
-          </div>
+        <details>
+          <summary>Why does the side button no longer go Back or Forward in my browser?</summary>
+          <p>On Windows a low-level mouse hook sees the click first and returns before the message reaches the browser. It is the same mechanism that records the clip, so suppression and dictation are one event. macOS and Linux can observe the shortcut but not remove it.</p>
         </details>
 
-        <details class="faq-item">
-          <summary>How does the transcript paste into the right window?</summary>
-          <div class="faq-body">
-            The transcript overlay and clipboard history panels are created as Win32 <code>WS_EX_NOACTIVATE</code> tool windows (and macOS non-activating <code>NSPanel</code>). They never take keyboard focus from whatever application is active. When you release the shortcut, the app places the transcript onto the system clipboard and dispatches a synthetic <kbd class="keycap">Ctrl+V</kbd> (or <kbd class="keycap">Cmd+V</kbd>), which lands directly at your active cursor.
-          </div>
+        <details>
+          <summary>Where does the text actually land?</summary>
+          <p>On the clipboard, followed by a synthetic Ctrl+V, or Cmd+V on macOS, sent to whichever window has focus. The transcript panel is built with non-activating flags so it cannot pull focus away while that happens.</p>
         </details>
 
-        <details class="faq-item">
-          <summary>Can I use technical domain jargon or colleague names?</summary>
-          <div class="faq-body">
-            Yes. Add one phrase per line to <code>hotwords.txt</code> (e.g. <code>Kubernetes</code>, <code>PostgreSQL</code>, <code>OAuth2</code>, <code>Guangdong</code>). These terms are passed directly into the model context prompt to bias speech recognition accuracy. The file is hot-reloaded automatically when saved.
-          </div>
+        <details>
+          <summary>Can I dictate into an administrator window on Windows?</summary>
+          <p>Not from a normal user session: Windows blocks synthetic keystrokes from a lower integrity process to a higher one. Use Restart as Administrator in the tray menu for elevated consoles and tools.</p>
         </details>
 
-        <details class="faq-item">
-          <summary>What happens if I dictate into an Administrator/Elevated window?</summary>
-          <div class="faq-body">
-            Windows User Interface Privilege Isolation (UIPI) blocks non-elevated applications from sending synthetic keystrokes to elevated (admin) windows. If you need to dictate into elevated command prompts or admin tools, use the tray icon menu item: <strong>Restart as Administrator</strong>.
-          </div>
+        <details>
+          <summary>Why X11 and not Wayland on Linux?</summary>
+          <p>Wayland does not let an unprivileged background app read global keys and clicks, inject keystrokes into other windows, or draw a tray icon. The X11 path works today. <code>dictate.py --doctor</code> tells you which session you are in.</p>
         </details>
 
-        <details class="faq-item">
-          <summary>Why is Linux restricted to X11 sessions instead of Wayland?</summary>
-          <div class="faq-body">
-            Wayland security architecture explicitly forbids unprivileged background processes from intercepting global mouse/keyboard events, injecting synthetic keystrokes into other windows, and rendering arbitrary system tray icons. <code>type4voices</code> works natively on X11/Xorg sessions. Running <code>dictate.py --doctor</code> will report which display server session is active.
-          </div>
+        <details>
+          <summary>How do I get names and jargon right?</summary>
+          <p>Add one term per line to <code>hotwords.txt</code>, for example PostgreSQL or OAuth2. The list is passed to the model as context and reloaded when the file changes, so names come back the way you wrote them.</p>
         </details>
 
+        <details>
+          <summary>Can I use a keyboard shortcut instead of a mouse button?</summary>
+          <p>Yes, and the recorder refuses bare letters on purpose: a lone J would fire while you type normally. Use a modifier, as in Ctrl+Alt+J, or a function key such as F8. The choice is saved to <code>config.json</code> and applies without a restart.</p>
+        </details>
+
+        <details>
+          <summary>Do I have to install anything else to send it to someone?</summary>
+          <p>The code is in one repository, the weights are not. Copy the model cache directory to the other machine and point <code>HF_HOME</code> at it, or run <code>download_model.py</code> there once. GitHub cannot host a 4.4 GB release asset, so the cache is the practical way to hand over an offline copy.</p>
+        </details>
       </div>
     </div>
   </section>
 
 </main>
 
-<!-- ------------------------------------------------------------- Site Footer -->
-<footer class="site-footer">
-  <div class="wrap footer-grid">
-    <div class="footer-left">
-      <div style="display: flex; align-items: center; gap: 8px; color: #ffffff; font-weight: 700;">
-        <div class="traffic-light-mini" style="width: 14px; height: 24px; padding: 2px;">
-          <div class="lamp red-on" style="width: 8px; height: 8px;"></div>
-          <div class="lamp" style="width: 8px; height: 8px;"></div>
-        </div>
-        type4voices
-      </div>
-      <span>Local offline voice typing for Windows, macOS and Linux.</span>
-      <span>Model weights: Apache-2.0. Application code: open source.</span>
+<footer>
+  <div class="wrap">
+    <div>
+      <p><strong>type4voices</strong>, local voice typing for Windows, macOS and Linux.</p>
+      <p>Built and tested on Windows 11. The macOS and Linux paths are written but have not run on real hardware yet.</p>
+      <p>Application code: use it as you like. Model weights: Apache-2.0.</p>
     </div>
-
-    <div class="footer-nav">
-      <a href="#simulator">Simulator</a>
-      <a href="#benchmarks">Benchmarks</a>
-      <a href="#deepdive">Architecture</a>
-      <a href="#setup">Install</a>
-      <a href="#faq">FAQ</a>
+    <div class="flinks">
+      <a href="https://github.com/jaxontan/type4voices">Repository</a>
+      <a href="https://github.com/jaxontan/type4voices/blob/main/README.md">README</a>
+      <a href="https://github.com/jaxontan/type4voices/blob/main/MODEL_NOTES.md">Model notes</a>
     </div>
   </div>
 </footer>
-
-<!-- ------------------------------------------------------------- Toast Shortcut Hint -->
-<div class="toast-hint" id="toastHint">
-  <span style="color: var(--lamp-green);">●</span>
-  <span>Tip: Hold <kbd class="keycap">Space</kbd> anywhere on page to trigger dictation</span>
-  <button onclick="document.getElementById('toastHint').classList.add('hidden')" style="background:transparent; border:none; color:var(--text-low); cursor:pointer;">✕</button>
-</div>
-
-<!-- -------------------------------------------------------------------------
-     JAVASCRIPT: High-Fidelity Interactive State Engine
-     ------------------------------------------------------------------------- -->
-<script>
-// State Machine Variables
-let isRecording = false;
-let isTranscribing = false;
-let recordingStartTime = 0;
-let recordingTimerInterval = null;
-let animFrameId = null;
-let currentScenarioIdx = 0;
-let realMicStream = null;
-let audioCtx = null;
-let analyser = null;
-let dataArray = null;
-
-// Presets data
-const SCENARIOS = [
-  {
-    name: "Git Commit",
-    targetTab: "VS Code — commit_msg.txt",
-    prefix: "// Staged changes: 4 files\n// Enter commit message below:\n\n",
-    spoken: "Fix race condition in low level mouse hook and update documentation period",
-    transcript: "Fix race condition in low-level mouse hook and update documentation.",
-    audioSeconds: 2.1
-  },
-  {
-    name: "Spoken Numbers",
-    targetTab: "Excel — Invoice_Q4.xlsx",
-    prefix: "Client ID: ACME-CORP\nPO Number: ",
-    spoken: "Four four seven one with total three thousand two hundred dollars point five zero",
-    transcript: "4471 with total 3200 dollars.50",
-    audioSeconds: 2.4
-  },
-  {
-    name: "Domain & Punctuation",
-    targetTab: "Slack — #engineering-core",
-    prefix: "Reply to @sarah:\n",
-    spoken: "Please send the logs to support dot internal dot com before five p m question mark",
-    transcript: "Please send the logs to support.internal.com before 5pm?",
-    audioSeconds: 2.8
-  },
-  {
-    name: "Slack / Email",
-    targetTab: "Outlook — Re: Design Architecture",
-    prefix: "Hi Alex,\n\n",
-    spoken: "I reviewed the offline model pipeline and it looks solid new line let us merge it tomorrow morning period",
-    transcript: "I reviewed the offline model pipeline and it looks solid\nlet us merge it tomorrow morning.",
-    audioSeconds: 3.2
-  }
-];
-
-// Audio Waveform Canvas Setup
-const canvas = document.getElementById('waveformCanvas');
-const ctx = canvas.getContext('2d');
-
-function drawIdleWaveform() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = '#222b3a';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(0, canvas.height / 2);
-  ctx.lineTo(canvas.width, canvas.height / 2);
-  ctx.stroke();
-}
-
-function drawActiveWaveform(time) {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const width = canvas.width;
-  const height = canvas.height;
-  const mid = height / 2;
-
-  if (realMicStream && analyser) {
-    analyser.getByteTimeDomainData(dataArray);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#2ecc71';
-    ctx.beginPath();
-    const sliceWidth = width * 1.0 / analyser.fftSize;
-    let x = 0;
-    for (let i = 0; i < analyser.fftSize; i++) {
-      const v = dataArray[i] / 128.0;
-      const y = v * mid;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-      x += sliceWidth;
-    }
-    ctx.lineTo(width, mid);
-    ctx.stroke();
-  } else {
-    // Realistic procedural speech simulation
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#2ecc71';
-    ctx.beginPath();
-    ctx.moveTo(0, mid);
-    
-    for (let x = 0; x < width; x += 3) {
-      const freq1 = Math.sin(x * 0.08 + time * 0.015);
-      const freq2 = Math.sin(x * 0.22 - time * 0.02);
-      const envelope = Math.sin((x / width) * Math.PI);
-      const noise = (Math.random() - 0.5) * 8;
-      const amp = (freq1 * 12 + freq2 * 8 + noise) * envelope;
-      ctx.lineTo(x, mid + amp);
-    }
-    ctx.stroke();
-  }
-  
-  if (isRecording) {
-    animFrameId = requestAnimationFrame(drawActiveWaveform);
-  }
-}
-
-// Push to Talk Handlers
-function startRecording() {
-  if (isRecording || isTranscribing) return;
-  isRecording = true;
-  recordingStartTime = performance.now();
-
-  // Update physical lamps & status
-  setLampsState("recording");
-
-  // Update UI Elements
-  document.getElementById('pttButton').classList.add('holding');
-  document.getElementById('controllerStateText').innerText = "RECORDING";
-  document.getElementById('controllerStateText').style.color = "var(--lamp-green)";
-  document.getElementById('waveformStats').innerText = "STREAMING (16 kHz active)";
-
-  // Update overlay window
-  document.getElementById('overlayDot').classList.add('active');
-  document.getElementById('overlayTitle').innerText = "Recording...";
-  document.getElementById('overlayMeta').innerText = "0:00";
-
-  // Audio waveform animation
-  cancelAnimationFrame(animFrameId);
-  animFrameId = requestAnimationFrame(drawActiveWaveform);
-
-  // Timer interval
-  recordingTimerInterval = setInterval(() => {
-    const elapsed = (performance.now() - recordingStartTime) / 1000;
-    const secs = Math.floor(elapsed);
-    const ms = Math.floor((elapsed % 1) * 10);
-    const str = `0:${secs < 10 ? '0' : ''}${secs}.${ms}`;
-    document.getElementById('pttTimerLabel').innerText = `Recording: ${str}`;
-    document.getElementById('overlayMeta').innerText = str;
-  }, 100);
-}
-
-function stopRecording() {
-  if (!isRecording) return;
-  isRecording = false;
-  clearInterval(recordingTimerInterval);
-  cancelAnimationFrame(animFrameId);
-  drawIdleWaveform();
-
-  const elapsed = (performance.now() - recordingStartTime) / 1000;
-  document.getElementById('pttButton').classList.remove('holding');
-
-  // Guard: minimum recording threshold
-  if (elapsed < 0.4) {
-    setLampsState("idle");
-    document.getElementById('controllerStateText').innerText = "IGNORED (<1s click)";
-    document.getElementById('controllerStateText').style.color = "var(--text-low)";
-    document.getElementById('pttTimerLabel').innerText = "Hold [Space] or Mouse Side 2";
-    document.getElementById('overlayTitle').innerText = "Ignored (< 1.0s)";
-    setTimeout(resetSimulatorState, 1400);
-    return;
-  }
-
-  // Transcribing state (simulate PyTorch latency ~400ms for demo responsiveness)
-  isTranscribing = true;
-  setLampsState("recording"); // Green stays lit during transcription
-  document.getElementById('controllerStateText').innerText = "QWEN3-ASR INFERENCE";
-  document.getElementById('controllerStateText').style.color = "#38bdf8";
-  document.getElementById('pttTimerLabel').innerText = "Decoding speech tokens...";
-  document.getElementById('overlayTitle').innerText = "Transcribing...";
-
-  setTimeout(() => {
-    finishTranscription();
-  }, 450);
-}
-
-function finishTranscription() {
-  isTranscribing = false;
-  setLampsState("idle");
-
-  const scenario = SCENARIOS[currentScenarioIdx];
-  document.getElementById('controllerStateText').innerText = "IDLE (Swallowed & Pasted)";
-  document.getElementById('controllerStateText').style.color = "var(--lamp-red)";
-  document.getElementById('pttTimerLabel').innerText = "Mouse Side 2 / Hold [Space]";
-  document.getElementById('waveformStats').innerText = "16 kHz · 1 ch · float32";
-
-  // Simulate typing transcript into editor with cursor
-  typeOutText(scenario.transcript);
-
-  // Update Mini Overlay
-  document.getElementById('overlayDot').classList.remove('active');
-  document.getElementById('overlayTitle').innerText = "Dictated (" + scenario.audioSeconds + "s)";
-  document.getElementById('overlayMeta').innerText = "Pasted at cursor";
-
-  const body = document.getElementById('overlayBody');
-  const newRow = document.createElement('div');
-  newRow.className = 'overlay-entry';
-  newRow.innerHTML = `<span class="idx">●</span><span>${scenario.transcript}</span>`;
-  body.insertBefore(newRow, body.firstChild);
-}
-
-function typeOutText(fullText) {
-  const container = document.getElementById('editorDictated');
-  container.innerHTML = "";
-  let idx = 0;
-  const speed = 25; // ms per char
-
-  function nextChar() {
-    if (idx < fullText.length) {
-      container.innerText += fullText.charAt(idx);
-      idx++;
-      setTimeout(nextChar, speed);
-    }
-  }
-  nextChar();
-}
-
-function setLampsState(state) {
-  const redChassis = document.getElementById('chassisLampRed');
-  const greenChassis = document.getElementById('chassisLampGreen');
-  const navRed = document.getElementById('navLampRed');
-  const navGreen = document.getElementById('navLampGreen');
-  const mockTrayRed = document.getElementById('mockTrayRed');
-  const mockTrayGreen = document.getElementById('mockTrayGreen');
-
-  if (state === "recording") {
-    redChassis.classList.remove('active');
-    greenChassis.classList.add('active');
-    navRed.classList.remove('red-on');
-    navGreen.classList.add('green-on');
-    if (mockTrayRed) { mockTrayRed.classList.remove('red-on'); mockTrayGreen.classList.add('green-on'); }
-  } else {
-    redChassis.classList.add('active');
-    greenChassis.classList.remove('active');
-    navRed.classList.add('red-on');
-    navGreen.classList.remove('green-on');
-    if (mockTrayRed) { mockTrayRed.classList.add('red-on'); mockTrayGreen.classList.remove('green-on'); }
-  }
-}
-
-function resetSimulatorState() {
-  document.getElementById('controllerStateText').innerText = "IDLE";
-  document.getElementById('controllerStateText').style.color = "var(--lamp-red)";
-  document.getElementById('pttTimerLabel').innerText = "Mouse Side 2 / Hold [Space]";
-}
-
-// Scenarios handling
-function setScenario(idx) {
-  currentScenarioIdx = idx;
-  const btns = document.querySelectorAll('.preset-btn');
-  btns.forEach((b, i) => b.classList.toggle('active', i === idx));
-  const sc = SCENARIOS[idx];
-
-  document.getElementById('mockAppTab').innerText = sc.targetTab;
-  const prefixSpan = document.querySelector('.editor-prefix');
-  prefixSpan.innerText = sc.prefix;
-  document.getElementById('editorDictated').innerText = "";
-}
-
-// Real Mic Toggle via Web Audio API
-async function toggleRealMic() {
-  const btn = document.getElementById('toggleRealMicBtn');
-  if (!realMicStream) {
-    try {
-      realMicStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = audioCtx.createMediaStreamSource(realMicStream);
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      dataArray = new Uint8Array(analyser.frequencyBinCount);
-      source.connect(analyser);
-
-      btn.innerText = "Disable Mic";
-      btn.style.borderColor = "var(--lamp-green)";
-      btn.style.color = "var(--lamp-green)";
-    } catch (err) {
-      alert("Microphone permission denied or not available. Using simulated high-fidelity waveform.");
-    }
-  } else {
-    realMicStream.getTracks().forEach(t => t.stop());
-    realMicStream = null;
-    btn.innerText = "Enable Real Mic";
-    btn.style.borderColor = "";
-    btn.style.color = "";
-  }
-}
-
-// Mouse and Keyboard Listeners for Simulator
-const pttBtn = document.getElementById('pttButton');
-pttBtn.addEventListener('mousedown', (e) => { e.preventDefault(); startRecording(); });
-window.addEventListener('mouseup', () => { if (isRecording) stopRecording(); });
-pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
-pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });
-
-// Global Spacebar listener for tactile testing (unless typing in input)
-window.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-    e.preventDefault();
-    startRecording();
-    document.getElementById('toastHint').classList.add('hidden');
-  }
-});
-window.addEventListener('keyup', (e) => {
-  if (e.code === 'Space' && isRecording && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-    e.preventDefault();
-    stopRecording();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Text Cleanup Interactive Playground
-// ---------------------------------------------------------------------------
-const CLEANUP_CASES = [
-  {
-    input: "Call one two three dot my number is five five five one two three four.",
-    expected: "Call 123. My number is 5551234.",
-    note: "Rule: Sequences of spoken digit words are combined into continuous integer strings."
-  },
-  {
-    input: "Open example dot com and download version one point two three.",
-    expected: "Open example.com and download version 1.23.",
-    note: "Rule: 'dot com' converts to domain syntax, and 'point two three' converts to decimal figures."
-  },
-  {
-    input: "Hello comma world period new line this is paragraph two exclamation mark",
-    expected: "Hello, world.\nThis is paragraph two!",
-    note: "Rule: Spoken punctuation tokens ('comma', 'period', 'new line') map to typed symbols with correct spacing."
-  },
-  {
-    input: "The red dot is located next to the word dot.",
-    expected: "The red dot is located next to the word dot.",
-    note: "Rule: Protection for nouns. 'The red dot' leaves 'dot' alone because it's a noun phrase, not a sentence period."
-  },
-  {
-    input: "So um we need to uh deploy this hotfix before five p m.",
-    expected: "So we need to deploy this hotfix before 5pm.",
-    note: "Rule: Natural speech disfluencies ('um', 'uh') are cleanly removed without rewriting context."
-  }
-];
-
-function setCleanupCase(idx) {
-  const chips = document.querySelectorAll('.cleanup-chip');
-  chips.forEach((c, i) => c.classList.toggle('active', i === idx));
-  const tc = CLEANUP_CASES[idx];
-
-  document.getElementById('cleanupInput').value = tc.input;
-  document.getElementById('cleanupOutput').innerText = tc.expected;
-  document.getElementById('cleanupRuleNote').innerText = tc.note;
-}
-
-function runLiveCleanup() {
-  const input = document.getElementById('cleanupInput').value;
-  const start = performance.now();
-
-  // Basic simulation of text_cleanup.postprocess_text rules
-  let text = input
-    .replace(/\b(um|uh)\b/gi, '')
-    .replace(/\bdot com\b/gi, '.com')
-    .replace(/\bpoint zero\b/gi, '.0')
-    .replace(/\bpoint five\b/gi, '.5')
-    .replace(/\bnew line\b/gi, '\n')
-    .replace(/\bcomma\b/gi, ',')
-    .replace(/\bperiod\b/gi, '.')
-    .replace(/\bquestion mark\b/gi, '?')
-    .replace(/\bexclamation mark\b/gi, '!')
-    .replace(/\bone two three\b/gi, '123')
-    .replace(/\bfive five five\b/gi, '555')
-    .replace(/\bthree thousand two hundred\b/gi, '3200')
-    .replace(/\bforty two\b/gi, '42')
-    .replace(/\s+/g, ' ')
-    .replace(/\s,\s/g, ', ')
-    .replace(/\s\.\s/g, '. ')
-    .trim();
-
-  const elapsed = (performance.now() - start).toFixed(2);
-  document.getElementById('cleanupOutput').innerText = text;
-  document.getElementById('cleanupTiming').innerText = `${elapsed} ms`;
-}
-
-// ---------------------------------------------------------------------------
-// Tray Menu Interaction
-// ---------------------------------------------------------------------------
-function toggleTrayMenu() {
-  const menu = document.getElementById('trayContextMenu');
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-}
-
-function alertSim(msg) {
-  alert("[type4voices daemon]\n" + msg);
-}
-
-function triggerDetectShortcutModal() {
-  alert("In real app, Tray → 'Detect a new shortcut…' opens the overlay window and registers whatever key chord or mouse click you press next.");
-}
-
-// ---------------------------------------------------------------------------
-// Hotkey Detector Demo
-// ---------------------------------------------------------------------------
-function testKeyInput(e) {
-  e.preventDefault();
-  const res = document.getElementById('keyValidationResult');
-  const input = document.getElementById('keyTestInput');
-
-  // Single key check
-  const key = e.key;
-  const code = e.code;
-  const ctrl = e.ctrlKey;
-  const alt = e.altKey;
-  const shift = e.shiftKey;
-  const meta = e.metaKey;
-
-  let combo = [];
-  if (ctrl) combo.push("Ctrl");
-  if (alt) combo.push("Alt");
-  if (shift) combo.push("Shift");
-  if (meta) combo.push("Cmd");
-
-  if (!["Control", "Alt", "Shift", "Meta"].includes(key)) {
-    combo.push(key.toUpperCase());
-  }
-
-  const str = combo.join("+");
-  input.value = str;
-
-  // Check bare letter
-  if (!ctrl && !alt && !meta && key.length === 1 && /[a-zA-Z0-9]/.test(key)) {
-    res.style.borderColor = "var(--lamp-red)";
-    res.style.color = "var(--lamp-red)";
-    res.innerText = `Refused: "${key}" alone would hijack normal typing. Add Ctrl or Alt.`;
-  } else if (combo.length > 0 && !["Control", "Alt", "Shift", "Meta"].includes(key)) {
-    res.style.borderColor = "var(--lamp-green)";
-    res.style.color = "var(--lamp-green)";
-    res.innerText = `Valid Trigger: ${str} registered to config.json!`;
-  } else {
-    res.innerText = "Holding modifiers...";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Setup Tabs and Clipboard
-// ---------------------------------------------------------------------------
-function setSetupTab(os) {
-  const btns = document.querySelectorAll('.setup-tab-btn');
-  btns.forEach(b => b.classList.remove('active'));
-
-  document.getElementById('tabContentWin').style.display = 'none';
-  document.getElementById('tabContentMac').style.display = 'none';
-  document.getElementById('tabContentLinux').style.display = 'none';
-
-  if (os === 'win') {
-    btns[0].classList.add('active');
-    document.getElementById('tabContentWin').style.display = 'block';
-  } else if (os === 'mac') {
-    btns[1].classList.add('active');
-    document.getElementById('tabContentMac').style.display = 'block';
-  } else {
-    btns[2].classList.add('active');
-    document.getElementById('tabContentLinux').style.display = 'block';
-  }
-}
-
-function copySetupCode(os) {
-  let text = "";
-  if (os === 'win') text = document.getElementById('codeWin').innerText;
-  else if (os === 'mac') text = document.getElementById('codeMac').innerText;
-  else text = document.getElementById('codeLinux').innerText;
-
-  navigator.clipboard.writeText(text).then(() => {
-    alert("Commands copied to clipboard!");
-  });
-}
-
-// Initial initialization
-window.addEventListener('DOMContentLoaded', () => {
-  drawIdleWaveform();
-  setScenario(0);
-  setCleanupCase(0);
-});
-</script>
 
 </body>
 </html>
