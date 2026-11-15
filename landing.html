@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>type4voices: local voice typing for Windows, macOS and Linux</title>
-<meta name="description" content="Hold a mouse button, speak, let go, and the words land at the cursor. Qwen3-ASR runs on your CPU, so dictation works offline.">
+<meta name="description" content="Hold a mouse button, speak, let go. The sentence lands at the caret. Qwen3-ASR runs on your own CPU, so dictation works offline.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='5' fill='%2322252a'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23c33a30'/%3E%3Ccircle cx='8' cy='16' r='3' fill='%233a3f46'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -14,12 +14,24 @@
     --ink: #15171a;
     --ink-2: #4d525a;
     --ink-3: #6b7178;
-    --rule: #e4e1da;
+    --rule: #e3e0d9;
     --wash: #f2efe9;
     --green: #1c8248;
     --red: #c33a30;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --max: 1000px;
+    --screen: #181b20;
+    --screen-2: #1c1f25;
+    --screen-line: #2b3037;
+    --panel: #1b1e25;
+    --panel-line: #3a404c;
+    --panel-ink: #e9ecf1;
+    --panel-mute: #98a1b0;
+    --lamp-red: #ec3e36;
+    --lamp-green: #34cc60;
+    --lamp-red-off: #511512;
+    --lamp-green-off: #11451f;
   }
 
   @media (prefers-color-scheme: dark) {
@@ -27,11 +39,16 @@
       --paper: #131518;
       --ink: #eceef1;
       --ink-2: #b3b9c1;
-      --ink-3: #868d97;
-      --rule: #2a2e34;
-      --wash: #1a1d21;
+      --ink-3: #8b929c;
+      --rule: #292d33;
+      --wash: #191c20;
       --green: #46d07c;
       --red: #ef6a5f;
+      --screen: #171a1f;
+      --screen-2: #1c2026;
+      --screen-line: #2c3139;
+      --panel: #1e222a;
+      --panel-line: #3b424e;
     }
   }
 
@@ -48,10 +65,9 @@
 
   h1, h2, h3 { text-wrap: balance; }
   a { color: inherit; }
+  .wrap { width: 100%; max-width: var(--max); margin: 0 auto; padding-left: 18px; padding-right: 18px; }
 
-  .wrap { max-width: 940px; margin: 0 auto; padding: 0 20px; }
-
-  /* header: mobile first */
+  /* ------------------------------------------------------------- header -- */
 
   .site { border-bottom: 1px solid var(--rule); }
 
@@ -59,36 +75,43 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 14px;
     min-height: 56px;
   }
 
   .brand {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     font: 600 14px/1 var(--mono);
     letter-spacing: .01em;
     text-decoration: none;
   }
 
-  .lamps {
+  .tl {
     display: inline-flex;
+    flex: none;
     flex-direction: column;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 4px;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 16px;
+    height: 26px;
+    border: 1px solid #0a0b0d;
+    border-radius: 4.5px;
     background: #22252a;
   }
 
-  .lamps i { width: 5px; height: 5px; border-radius: 50%; background: #3a3f46; }
-  .lamps i.red { background: var(--red); }
-  .lamps i.green { background: var(--green); }
+  .tl i { width: 9px; height: 9px; border-radius: 50%; background: #3a3f46; }
+  .tl i.r { background: var(--lamp-red); }
+  .tl i.g { background: var(--lamp-green); }
+  .tl i.r.off { background: var(--lamp-red-off); }
+  .tl i.g.off { background: var(--lamp-green-off); }
 
-  nav { display: flex; gap: 16px; }
+  nav { display: flex; gap: 18px; }
 
   nav a {
-    font-size: 12.5px;
+    font-size: 13px;
     color: var(--ink-2);
     text-decoration: none;
     white-space: nowrap;
@@ -96,339 +119,423 @@
 
   nav a:hover { color: var(--ink); }
 
-  @media (max-width: 479px) {
-    .site .wrap {
-      flex-wrap: wrap;
-      row-gap: 6px;
-      padding-top: 10px;
-      padding-bottom: 10px;
-      min-height: 0;
-    }
+  /* --------------------------------------------------------------- hero -- */
 
-    nav { width: 100%; }
-  }
-
-  /* hero */
-
-  .hero { padding-top: 44px; padding-bottom: 40px; }
+  .hero { padding-top: 40px; padding-bottom: 8px; }
 
   .kicker {
     margin: 0 0 14px;
-    font: 500 11px/1 var(--mono);
-    letter-spacing: .09em;
+    font: 500 10.5px/1.6 var(--mono);
+    letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--ink-3);
   }
 
   h1 {
-    margin: 0 0 16px;
-    font-size: clamp(2.05rem, 9vw, 3rem);
+    margin: 0 0 14px;
+    font-size: clamp(2.05rem, 9.5vw, 3.4rem);
     font-weight: 600;
-    line-height: 1.08;
-    letter-spacing: -.03em;
+    line-height: 1.04;
+    letter-spacing: -.035em;
   }
 
   .lead {
     margin: 0;
-    max-width: 44ch;
-    font-size: 17px;
+    max-width: 46ch;
+    font-size: 16.5px;
     color: var(--ink-2);
   }
 
-  .meta { margin: 16px 0 0; font: 12px/1.6 var(--mono); color: var(--ink-3); }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
+    margin: 16px 0 0;
+    font: 11.5px/1.7 var(--mono);
+    color: var(--ink-3);
+  }
 
-  /* hero figure */
+  /* ---------------------------------------------------------- filmstrip -- */
 
-  figure.shot { margin: 32px 0 0; }
+  .film {
+    display: grid;
+    gap: 12px;
+    margin: 30px 0 0;
+    padding: 0;
+    list-style: none;
+  }
 
-  .window {
+  .film li {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    background: #181b20;
-    border: 1px solid #2b3037;
-    border-radius: 8px;
+    min-width: 0;
   }
 
-  .winbar {
+  .frame {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--screen);
+    border: 1px solid var(--screen-line);
+    border-radius: 9px;
+  }
+
+  .f-bar {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px 12px;
-    background: #1c1f25;
+    gap: 5px;
+    padding: 7px 10px;
+    background: var(--screen-2);
     border-bottom: 1px solid #262a30;
-    font: 11.5px var(--mono);
-    color: #8d949e;
+    font: 10.5px/1 var(--mono);
+    color: #7e8590;
   }
 
-  .winbar .dots { display: flex; gap: 4px; }
-  .winbar .dots s { display: block; width: 7px; height: 7px; border-radius: 50%; background: #3a3f46; }
-  .winbar .name { margin-left: 2px; color: #c9ced6; }
-  .winbar .state { margin-left: auto; font-size: 10.5px; color: #6f7681; }
+  .f-dots { display: flex; gap: 4px; }
+  .f-dots s { display: block; width: 6px; height: 6px; border-radius: 50%; background: #343941; }
+  .f-bar b { margin-left: 4px; font-weight: 400; color: #b9bfc8; }
 
-  .winbody {
-    padding: 18px 16px 14px;
-    font: 13px/1.75 var(--mono);
-    color: #c7ccd3;
+  .f-body {
+    flex: 1;
+    min-height: 84px;
+    padding: 12px 12px 16px;
+    font: 11px/1.8 var(--mono);
+    color: #6f7681;
+    overflow-wrap: anywhere;
   }
 
-  .winbody p { margin: 0; }
-  .winbody p + p { margin-top: 8px; }
-  .winbody .dim { color: #6c737d; font-size: 12px; }
-  .winbody .current { color: #dfe4eb; }
-  .winbody .current b { font-weight: inherit; color: #8fd3a9; }
+  .f-body p { margin: 0; }
+  .f-body .lit { color: #dfe4ea; }
 
-  .panelwrap { position: relative; margin-top: -12px; padding: 0 10px; }
-
-  .panel {
-    margin-left: auto;
-    max-width: 320px;
-    padding: 10px 12px;
-    color: #dfe3e8;
-    background: #1d2026;
-    border: 1px solid #33383f;
-    border-radius: 7px;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, .16);
+  .caret {
+    display: inline-block;
+    width: 6px;
+    height: 12px;
+    margin-left: 2px;
+    vertical-align: -1px;
+    background: #8fd3a9;
   }
 
-  .panel-top {
+  .f-panel {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: -10px 8px 9px;
+    padding: 8px 9px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 6px;
+    font: 10.5px/1.45 var(--mono);
+    color: var(--panel-ink);
+  }
+
+  .f-panel .time, .f-panel .chev { color: var(--panel-mute); }
+  .f-panel .time, .f-panel .chev { margin-left: auto; }
+
+  .f-panel .cut {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; }
+  .dot.g { background: var(--lamp-green); }
+  .dot.r { background: var(--lamp-red); }
+
+  .step {
+    margin: 9px 0 0;
+    font: 500 10px/1.4 var(--mono);
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  /* ------------------------------------------------------------ sections -- */
+
+  section { margin-top: 46px; padding-top: 18px; border-top: 1px solid var(--rule); }
+
+  h2.kicker { margin-bottom: 18px; color: var(--ink-2); }
+
+  /* ----------------------------------------------------------- specimens -- */
+
+  .specs { display: grid; gap: 30px; }
+
+  .spec {
+    min-width: 0;
+    margin: 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--rule);
+  }
+
+  .spec-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 13px;
+    font: 500 10px/1.4 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .spec-head b { font-weight: 500; color: var(--ink-2); }
+
+  /* the dark panel and popup, drawn to the app's own colours */
+  .ui {
+    max-width: 380px;
+    padding: 9px 11px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 8px;
+    font: 11.5px/1.5 var(--mono);
+    color: var(--panel-ink);
+  }
+
+  .ui-head {
     display: flex;
     align-items: center;
     gap: 7px;
-    margin-bottom: 7px;
-    font: 11px var(--mono);
-    color: #9aa2ac;
+    padding-bottom: 7px;
   }
 
-  .panel-dot { width: 6px; height: 6px; border-radius: 50%; background: #46d07c; flex: none; }
-  .panel-top .time { margin-left: auto; color: #8b929c; }
-  .panel-text { font: 13.5px/1.45 var(--sans); color: #f1f3f5; }
-  .panel-foot {
+  .ui-head .right { margin-left: auto; color: var(--panel-mute); }
+
+  .ui-rule { height: 1px; margin: 0 0 6px; background: var(--panel-line); }
+
+  .entry {
     display: flex;
-    justify-content: space-between;
+    gap: 9px;
+    padding: 4px 5px;
+    margin: 0 -5px;
+    border-radius: 3px;
+  }
+
+  .entry:first-of-type { background: #22262f; }
+  .entry .stamp { flex: none; color: var(--panel-mute); font-size: 10.5px; }
+
+  .ui-item {
+    padding: 3px 0;
+    color: #d3d8df;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .ui-hint {
     margin-top: 7px;
-    font: 10.5px var(--mono);
-    color: #7f8792;
+    font-size: 9.5px;
+    line-height: 1.5;
+    color: var(--panel-mute);
   }
 
-  figcaption { margin-top: 12px; font-size: 12.5px; color: var(--ink-3); }
-
-  /* sections */
-
-  section { padding: 40px 0; border-top: 1px solid var(--rule); }
-
-  h2 {
-    margin: 0 0 8px;
-    font-size: clamp(1.25rem, 5vw, 1.55rem);
-    font-weight: 600;
-    line-height: 1.2;
-    letter-spacing: -.02em;
+  .capture {
+    padding: 10px 2px 4px;
+    font: 600 15px/1.4 var(--sans);
+    color: var(--panel-ink);
   }
 
-  .sub { margin: 0; max-width: 46ch; font-size: 15.5px; color: var(--ink-2); }
+  /* tray lamps */
+  .trayrow { display: flex; gap: 30px; align-items: flex-start; }
 
-  .body { margin-top: 24px; }
-  .body > p { margin: 16px 0 0; max-width: 58ch; font-size: 15.5px; color: var(--ink-2); }
-
-  /* definition rows: stacked on phones */
-
-  dl.rows { margin: 0; border-top: 1px solid var(--rule); }
-
-  dl.rows div {
-    display: block;
-    padding: 14px 0;
-    border-bottom: 1px solid var(--rule);
-  }
-
-  dl.rows dt { font: 500 12.5px/1.5 var(--mono); color: var(--ink); }
-  dl.rows dd { margin: 2px 0 0; font-size: 15px; color: var(--ink-2); }
-
-  /* lamps legend */
-
-  .legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 16px;
+  .trayrow figure {
+    display: grid;
+    justify-items: center;
+    gap: 9px;
     margin: 0;
-    padding: 0;
-    list-style: none;
-    font: 12px var(--mono);
+  }
+
+  .trayrow figcaption {
+    font: 500 9.5px/1 var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+
+  .tl.big { width: 26px; height: 42px; border-radius: 8px; gap: 5px; }
+  .tl.big i { width: 14px; height: 14px; }
+
+  /* cleanup */
+  .cases { margin: 0; }
+
+  .case {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--rule);
+    font: 12px/1.6 var(--mono);
+  }
+
+  .case:last-child { border-bottom: 0; padding-bottom: 0; }
+  .case .said { color: var(--ink-3); overflow-wrap: anywhere; }
+  .case .typed { color: var(--ink); overflow-wrap: anywhere; }
+  .case .arrow { display: none; }
+  .case .typed::before { content: "\2192\00a0\00a0"; color: var(--ink-3); }
+
+  /* tray menu */
+  .menu {
+    max-width: 300px;
+    padding: 6px 0;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    box-shadow: 0 12px 26px rgba(0, 0, 0, .07);
+    font-size: 13px;
+  }
+
+  .menu p {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 4px 12px;
     color: var(--ink-2);
   }
 
-  .legend li { display: flex; align-items: center; gap: 6px; }
+  .menu p.dim { color: var(--ink-3); font-size: 12px; }
+  .menu .tick { flex: none; width: 11px; font-size: 11px; color: var(--ink); }
+  .menu .tail { margin-left: auto; color: var(--ink-3); font-size: 11px; }
+  .menu hr { margin: 5px 8px; border: 0; border-top: 1px solid var(--rule); }
 
-  .pip {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--ink-3);
-    opacity: .4;
-    flex: none;
+  /* --------------------------------------------------------------- install -- */
+
+  .install { margin-top: 4px; }
+
+  .os {
+    display: grid;
+    gap: 10px;
+    padding: 16px 0;
+    border-top: 1px solid var(--rule);
   }
 
-  .pip.red { background: var(--red); opacity: 1; }
-  .pip.green { background: var(--green); opacity: 1; }
+  .os:first-child { border-top: 0; padding-top: 0; }
+  .os h3 { margin: 0; font-size: 14.5px; font-weight: 600; }
 
-  /* code */
+  .os p {
+    margin: 2px 0 0;
+    font: 11px/1.5 var(--mono);
+    color: var(--ink-3);
+  }
 
   pre {
     margin: 0;
     max-width: 100%;
-    padding: 14px;
+    padding: 13px 14px;
     overflow-x: auto;
     background: var(--wash);
     border: 1px solid var(--rule);
     border-radius: 7px;
-    font: 12.5px/1.7 var(--mono);
+    font: 12px/1.75 var(--mono);
+    color: var(--ink);
     white-space: pre-wrap;
     overflow-wrap: break-word;
   }
 
   pre .c { color: var(--ink-3); }
 
+  /* ---------------------------------------------------------------- limits -- */
+
+  .rows { margin: 0; }
+
+  .rows div {
+    padding: 12px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .rows dt { font: 500 12.5px/1.5 var(--mono); color: var(--ink); }
+
+  .rows dd {
+    margin: 3px 0 0;
+    max-width: 62ch;
+    font-size: 14.5px;
+    color: var(--ink-2);
+  }
+
   code {
     padding: 1px 4px;
     background: var(--wash);
     border: 1px solid var(--rule);
     border-radius: 4px;
-    font: 13px var(--mono);
+    font: 12.5px var(--mono);
   }
 
-  pre code { padding: 0; background: none; border: 0; }
+  /* ---------------------------------------------------------------- footer -- */
 
-  /* install rows */
+  footer {
+    margin-top: 52px;
+    padding: 26px 0 44px;
+    border-top: 1px solid var(--rule);
+    font: 12px/1.7 var(--mono);
+    color: var(--ink-3);
+  }
 
-  .install { margin-top: 24px; }
+  footer .wrap { display: grid; gap: 14px; }
+  footer p { margin: 0; }
 
-  .os { padding: 20px 0; border-top: 1px solid var(--rule); }
-  .os:last-child { border-bottom: 1px solid var(--rule); }
-  .os h3 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
-  .os .hint { margin: 0 0 12px; font-size: 12.5px; color: var(--ink-3); }
+  .flinks { display: flex; flex-wrap: wrap; gap: 6px 18px; }
 
-  /* tables */
-
-  .tablewrap { max-width: 100%; overflow-x: auto; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 15px; }
-
-  th, td {
-    padding: 9px 12px 9px 0;
-    text-align: left;
+  .flinks a {
+    color: var(--ink-2);
+    text-decoration: none;
     border-bottom: 1px solid var(--rule);
   }
 
-  th {
-    font: 500 10.5px/1.4 var(--mono);
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-  }
-
-  td { color: var(--ink-2); }
-  td:first-child { color: var(--ink); }
-
-  .note { margin: 14px 0 0; max-width: 58ch; font-size: 13px; color: var(--ink-3); }
-
-  /* questions */
-
-  .faq { margin-top: 20px; }
-
-  details { border-bottom: 1px solid var(--rule); }
-  details:first-of-type { border-top: 1px solid var(--rule); }
-
-  summary {
-    display: flex;
-    gap: 10px;
-    align-items: baseline;
-    padding: 13px 0;
-    font-size: 15px;
-    font-weight: 500;
-    cursor: pointer;
-    list-style: none;
-  }
-
-  summary::-webkit-details-marker { display: none; }
-
-  summary::before {
-    content: "+";
-    width: 9px;
-    flex: none;
-    font: 12px var(--mono);
-    color: var(--ink-3);
-  }
-
-  details[open] summary::before { content: "\2212"; }
-
-  details p { margin: 0 0 14px 19px; max-width: 56ch; font-size: 14.5px; color: var(--ink-2); }
-
-  /* footer */
-
-  footer {
-    padding: 28px 0 40px;
-    border-top: 1px solid var(--rule);
-    font-size: 12.5px;
-    color: var(--ink-3);
-  }
-
-  footer .wrap { display: block; }
-  footer p { margin: 0 0 5px; max-width: 46ch; }
-  footer p:first-child { color: var(--ink-2); }
-  a.plain { color: var(--ink-2); text-decoration: none; border-bottom: 1px solid var(--rule); }
-  a.plain:hover { color: var(--ink); border-color: var(--ink-3); }
-  .flinks { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
+  .flinks a:hover { color: var(--ink); border-color: var(--ink-3); }
 
   :focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
 
-  /* wider screens */
+  /* ------------------------------------------------------- wider screens -- */
 
-  @media (min-width: 600px) {
-    .wrap { padding: 0 28px; }
-    .site .wrap { min-height: 64px; }
-    nav { gap: 22px; }
+  @media (min-width: 560px) {
+    .wrap { padding-left: 28px; padding-right: 28px; }
+    .site .wrap { min-height: 62px; }
+    nav { gap: 24px; }
     nav a { font-size: 13.5px; }
 
-    .hero { padding-top: 64px; padding-bottom: 56px; }
+    .hero { padding-top: 60px; }
     .lead { font-size: 17.5px; }
-    section { padding: 52px 0; }
 
-    figure.shot { margin-top: 44px; }
-    .winbody { padding: 24px 24px 16px; min-height: 188px; font-size: 13.5px; }
-    .winbody .dim { font-size: 13.5px; }
-    .panelwrap { margin-top: -28px; padding: 0 20px; }
-
-    dl.rows div {
-      display: grid;
-      grid-template-columns: 10.5rem minmax(0, 1fr);
-      gap: 24px;
+    .case {
+      grid-template-columns: minmax(0, 1fr) 12px minmax(0, 1fr);
       align-items: baseline;
-      padding: 15px 0;
+      column-gap: 12px;
     }
 
-    dl.rows dd { margin: 0; }
+    .case .arrow { display: block; font-size: 12px; color: var(--ink-3); }
+    .case .typed::before { content: none; }
 
-    .os {
-      display: grid;
-      grid-template-columns: 14rem minmax(0, 1fr);
-      gap: 28px;
-      align-items: start;
-      padding: 24px 0;
-    }
-
-    .os .hint { margin-bottom: 0; }
     pre { white-space: pre; overflow-wrap: normal; }
+  }
 
-    footer .wrap { display: flex; justify-content: space-between; gap: 32px; }
-    footer .flinks { margin-top: 0; }
+  @media (min-width: 660px) {
+    .film { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  }
+
+  @media (min-width: 700px) {
+    .specs { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 52px; row-gap: 36px; }
+
+    .rows div {
+      display: grid;
+      grid-template-columns: 11rem minmax(0, 1fr);
+      gap: 26px;
+      align-items: baseline;
+      padding: 13px 0;
+    }
+
+    .rows dd { margin: 0; }
+  }
+
+  @media (min-width: 720px) {
+    .os { grid-template-columns: 10rem minmax(0, 1fr); gap: 24px; align-items: start; }
+    .os pre { width: fit-content; max-width: 100%; }
   }
 
   @media (min-width: 900px) {
-    .hero { padding-top: 80px; padding-bottom: 64px; }
-    h1 { max-width: 24ch; }
-    section { padding: 60px 0; }
-
-    dl.rows div { grid-template-columns: 12.5rem minmax(0, 1fr); gap: 28px; }
-    td, th { padding: 11px 16px 11px 0; }
+    .hero { padding-top: 72px; }
+    h1 { max-width: 22ch; }
+    section { margin-top: 58px; }
   }
 </style>
 </head>
@@ -437,13 +544,12 @@
 <header class="site">
   <div class="wrap">
     <a class="brand" href="#top">
-      <span class="lamps" aria-hidden="true"><i class="red"></i><i></i></span>
+      <span class="tl" aria-hidden="true"><i class="r"></i><i class="g off"></i></span>
       type4voices
     </a>
     <nav>
-      <a href="#how">How</a>
       <a href="#install">Install</a>
-      <a href="#faq">Questions</a>
+      <a href="#limits">Limits</a>
       <a href="https://github.com/jaxontan/type4voices">GitHub</a>
     </nav>
   </div>
@@ -452,147 +558,219 @@
 <main id="top">
 
   <div class="wrap hero">
-    <p class="kicker">Windows, macOS and Linux</p>
-    <h1>Speak. It lands at the cursor.</h1>
+    <p class="kicker">Windows &middot; macOS &middot; Linux</p>
+    <h1>Talk, and it types.</h1>
     <p class="lead">
-      Hold the Forward mouse button, talk, let go. Qwen3-ASR types the sentence into
-      the window that already had focus, on your own CPU, with no network.
+      Hold the Forward mouse button, speak, let go. The sentence lands at the caret
+      of whichever window has focus. Qwen3-ASR runs on your own CPU, with the network off.
     </p>
-    <p class="meta">Python 3.10+ &middot; 4.4 GB model, downloaded once</p>
+    <p class="meta"><span>1.7B model</span><span>4.4 GB once</span><span>Apache-2.0</span><span>2 s spoken, 3 s pasted</span></p>
 
-    <figure class="shot">
-      <div class="window">
-        <div class="winbar">
-          <span class="dots" aria-hidden="true"><s></s><s></s><s></s></span>
-          <span class="name">notes.md</span>
-          <span class="state">caret in the editor</span>
-        </div>
-        <div class="winbody">
-          <p class="dim">## Friday</p>
-          <p class="dim">Tested the installer on the old laptop.</p>
-          <p class="current">Ship the build after lunch.<b aria-hidden="true">|</b></p>
-        </div>
-      </div>
-      <div class="panelwrap">
-        <div class="panel">
-          <div class="panel-top">
-            <span class="panel-dot" aria-hidden="true"></span>
-            <span>Transcribed</span>
+    <ol class="film">
+      <li>
+        <div class="frame">
+          <div class="f-bar">
+            <span class="f-dots" aria-hidden="true"><s></s><s></s><s></s></span>
+            <b>notes.md</b>
+          </div>
+          <div class="f-body">
+            <p>## Friday</p>
+            <p>Tested the installer on the old laptop.</p>
+          </div>
+          <div class="f-panel">
+            <span class="dot g" aria-hidden="true"></span>
+            <span>Recording</span>
             <span class="time">0:03</span>
           </div>
-          <div class="panel-text">Ship the build after lunch.</div>
-          <div class="panel-foot">
-            <span>click for history</span>
-            <span>on clipboard</span>
+        </div>
+        <p class="step">Hold</p>
+      </li>
+
+      <li>
+        <div class="frame">
+          <div class="f-bar">
+            <span class="f-dots" aria-hidden="true"><s></s><s></s><s></s></span>
+            <b>notes.md</b>
+          </div>
+          <div class="f-body">
+            <p>## Friday</p>
+            <p>Tested the installer on the old laptop.</p>
+          </div>
+          <div class="f-panel">
+            <span class="dot g" aria-hidden="true"></span>
+            <span>Transcribing&hellip;</span>
+            <span class="chev" aria-hidden="true">&#8964;</span>
           </div>
         </div>
-      </div>
-      <figcaption>Timer, then transcript. The panel cannot take focus, so the caret stays put.</figcaption>
-    </figure>
+        <p class="step">Release</p>
+      </li>
+
+      <li>
+        <div class="frame">
+          <div class="f-bar">
+            <span class="f-dots" aria-hidden="true"><s></s><s></s><s></s></span>
+            <b>notes.md</b>
+          </div>
+          <div class="f-body">
+            <p>## Friday</p>
+            <p>Tested the installer on the old laptop.</p>
+            <p class="lit">Ship the build after lunch.<span class="caret" aria-hidden="true"></span></p>
+          </div>
+          <div class="f-panel">
+            <span class="dot r" aria-hidden="true"></span>
+            <span class="cut">Ship the build after lunch.</span>
+            <span class="chev" aria-hidden="true">&#8964;</span>
+          </div>
+        </div>
+        <p class="step">Pasted</p>
+      </li>
+    </ol>
   </div>
 
-  <section>
-    <div class="wrap">
-      <h2>What it does</h2>
+  <section class="wrap" aria-labelledby="ui-label">
+    <h2 class="kicker" id="ui-label">Interface</h2>
 
-      <dl class="rows">
-        <div>
-          <dt>Talk</dt>
-          <dd>Hold to record, release to paste. Under a second is ignored.</dd>
-        </div>
-        <div>
-          <dt>Lamps</dt>
-          <dd>
-            <ul class="legend">
-              <li><span class="pip red" aria-hidden="true"></span>Idle</li>
-              <li><span class="pip green" aria-hidden="true"></span>Working</li>
-              <li><span class="pip" aria-hidden="true"></span>Paused</li>
-            </ul>
-          </dd>
-        </div>
-        <div>
-          <dt>Panel</dt>
-          <dd>Timer, then the transcript. Click it for history.</dd>
-        </div>
-        <div>
-          <dt>Clipboard</dt>
-          <dd>Left-click the tray icon for the last five copies.</dd>
-        </div>
-        <div>
-          <dt>Cleanup</dt>
-          <dd>Spoken numbers and punctuation are typed as characters.</dd>
-        </div>
-        <div>
-          <dt>Recorder</dt>
-          <dd>Any key, chord or click, applied on the spot: <code>F8</code>, <code>Ctrl+Alt+J</code>.</dd>
-        </div>
-        <div>
-          <dt>Windows</dt>
-          <dd>The side button stops navigating the browser.</dd>
-        </div>
-      </dl>
-    </div>
-  </section>
+    <div class="specs">
 
-  <section id="how">
-    <div class="wrap">
-      <h2>One process, no server</h2>
-      <p class="sub">The same Python runs on all three systems. The OS quirks live in one file.</p>
+      <figure class="spec">
+        <figcaption class="spec-head"><b>Tray</b><span>notification area</span></figcaption>
+        <div class="trayrow">
+          <figure>
+            <span class="tl big" aria-hidden="true"><i class="r"></i><i class="g off"></i></span>
+            <figcaption>Idle</figcaption>
+          </figure>
+          <figure>
+            <span class="tl big" aria-hidden="true"><i class="r off"></i><i class="g"></i></span>
+            <figcaption>Working</figcaption>
+          </figure>
+          <figure>
+            <span class="tl big" aria-hidden="true"><i class="r off"></i><i class="g off"></i></span>
+            <figcaption>Paused</figcaption>
+          </figure>
+        </div>
+      </figure>
 
-      <div class="body">
-        <pre>hold     <span class="c">record</span>
-release  <span class="c">transcribe, clean, paste</span>
-paste    <span class="c">keep for the clipboard popup</span></pre>
-
-        <p>
-          Windows swallows the shortcut before the app sees it. macOS and Linux only
-          watch, so the key still reaches whatever is behind.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <section id="install">
-    <div class="wrap">
-      <h2>Install once</h2>
-      <p class="sub">Python 3.10+, a microphone, 6 GB of disk.</p>
-
-      <div class="install">
-        <div class="os">
-          <div>
-            <h3>Windows</h3>
-            <p class="hint">Python 3.12, PATH enabled</p>
+      <figure class="spec">
+        <figcaption class="spec-head"><b>Recorder</b><span>tray, shortcut, detect</span></figcaption>
+        <div class="ui">
+          <div class="ui-head">
+            <span class="dot g" aria-hidden="true"></span>
+            <span>Shortcut set</span>
+            <span class="right" aria-hidden="true">&#10005;</span>
           </div>
-          <pre>windows\setup.bat
+          <div class="ui-rule"></div>
+          <div class="capture">Ctrl+Alt+J</div>
+          <div class="ui-hint">This is the new trigger</div>
+        </div>
+      </figure>
+
+      <figure class="spec">
+        <figcaption class="spec-head"><b>Panel</b><span>click to expand</span></figcaption>
+        <div class="ui">
+          <div class="ui-head">
+            <span class="dot r" aria-hidden="true"></span>
+            <span>Transcript history &middot; 3</span>
+            <span class="right" aria-hidden="true">&#8963;</span>
+          </div>
+          <div class="ui-rule"></div>
+          <div class="entry"><span class="stamp">10:42</span><span>Ship the build after lunch.</span></div>
+          <div class="entry"><span class="stamp">10:47</span><span>Call 5551234 before five.</span></div>
+          <div class="entry"><span class="stamp">11:03</span><span>It costs 3200 dollars.</span></div>
+          <div class="ui-hint">Click to collapse &middot; right-click copies the history</div>
+        </div>
+      </figure>
+
+      <figure class="spec">
+        <figcaption class="spec-head"><b>Clipboard</b><span>left-click the icon</span></figcaption>
+        <div class="ui">
+          <div class="ui-head">
+            <span>Clipboard history &middot; 4</span>
+            <span class="right" aria-hidden="true">&#10005;</span>
+          </div>
+          <div class="ui-rule"></div>
+          <div class="ui-item">Ship the build after lunch.</div>
+          <div class="ui-item">Call 5551234 before five.</div>
+          <div class="ui-item">Hello, world.</div>
+          <div class="ui-item">It costs 3200 dollars.</div>
+          <div class="ui-hint">Click an item to copy &middot; right-click to close</div>
+        </div>
+      </figure>
+
+      <figure class="spec">
+        <figcaption class="spec-head"><b>Cleanup</b><span>spoken &rarr; typed</span></figcaption>
+        <div class="cases">
+          <div class="case">
+            <span class="said">Call one two three dot.</span>
+            <span class="arrow" aria-hidden="true">&rarr;</span>
+            <span class="typed">Call 123.</span>
+          </div>
+          <div class="case">
+            <span class="said">Hello comma world period.</span>
+            <span class="arrow" aria-hidden="true">&rarr;</span>
+            <span class="typed">Hello, world.</span>
+          </div>
+          <div class="case">
+            <span class="said">I have two apples.</span>
+            <span class="arrow" aria-hidden="true">&rarr;</span>
+            <span class="typed">I have two apples.</span>
+          </div>
+        </div>
+      </figure>
+
+      <figure class="spec">
+        <figcaption class="spec-head"><b>Menu</b><span>right-click the icon</span></figcaption>
+        <div class="menu">
+          <p class="dim">Model: Qwen3-ASR-1.7B</p>
+          <hr>
+          <p><span class="tick"></span>Pause Dictation</p>
+          <p><span class="tick"></span>Shortcut: Side button 2 (Forward)<span class="tail" aria-hidden="true">&#9656;</span></p>
+          <p><span class="tick">&#10003;</span>Clean up dictated text</p>
+          <p><span class="tick">&#10003;</span>Transcript panel</p>
+          <p><span class="tick"></span>Clipboard history<span class="tail">left-click</span></p>
+          <hr>
+          <p><span class="tick"></span>Restart as Administrator</p>
+        </div>
+      </figure>
+
+    </div>
+  </section>
+
+  <section class="wrap" id="install" aria-labelledby="install-label">
+    <h2 class="kicker" id="install-label">Install</h2>
+
+    <div class="install">
+      <div class="os">
+        <div>
+          <h3>Windows</h3>
+          <p>Python 3.12, PATH on</p>
+        </div>
+        <pre>windows\setup.bat
 .venv\Scripts\python.exe download_model.py
 windows\run_dictate.bat
-<span class="c"># no console window:</span>
-<span class="c"># windows\run_dictate_background.vbs</span></pre>
-        </div>
+<span class="c"># no console window: windows\run_dictate_background.vbs</span></pre>
+      </div>
 
-        <div class="os">
-          <div>
-            <h3>macOS</h3>
-            <p class="hint">Python 3.12 from python.org</p>
-          </div>
-          <pre>cd macos
+      <div class="os">
+        <div>
+          <h3>macOS</h3>
+          <p>Python 3.12, python.org</p>
+        </div>
+        <pre>cd macos
 chmod +x *.sh run_dictate.command
 ./setup.sh
 cd ..
 
 .venv/bin/python download_model.py
 ./macos/run_dictate.sh
-<span class="c"># then allow 3 macOS permissions</span>
-<span class="c"># and restart the app</span></pre>
-        </div>
+<span class="c"># then allow Microphone, Accessibility, Input Monitoring</span></pre>
+      </div>
 
-        <div class="os">
-          <div>
-            <h3>Linux</h3>
-            <p class="hint">X11, PortAudio</p>
-          </div>
-          <pre>sudo apt install python3-venv \
-  python3-tk libportaudio2 xclip
+      <div class="os">
+        <div>
+          <h3>Linux</h3>
+          <p>X11 session, PortAudio</p>
+        </div>
+        <pre>sudo apt install python3-venv python3-tk libportaudio2 xclip
 
 cd linux
 chmod +x *.sh
@@ -601,85 +779,40 @@ cd ..
 
 .venv/bin/python download_model.py
 ./linux/run_dictate.sh
-<span class="c"># X11 only, not Wayland</span></pre>
-        </div>
+<span class="c"># Wayland will not work</span></pre>
       </div>
     </div>
   </section>
 
-  <section>
-    <div class="wrap">
-      <h2>Two seconds in, three seconds out</h2>
+  <section class="wrap" id="limits" aria-labelledby="limits-label">
+    <h2 class="kicker" id="limits-label">Limits</h2>
 
-      <div class="body">
-        <div class="tablewrap">
-          <table>
-            <thead>
-              <tr><th scope="col">You say</th><th scope="col">You wait</th><th scope="col">On</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>2 s</td><td>about 3 s</td><td>a laptop CPU</td></tr>
-              <tr><td>4 s</td><td>about 4.5 s</td><td>the same laptop</td></tr>
-              <tr><td>first start of the day</td><td>45 s once</td><td>torch imports</td></tr>
-            </tbody>
-          </table>
-        </div>
-        <p class="note">After that it stays warm in the tray, using 4.4 GB of RAM for the 1.7B model.</p>
+    <dl class="rows">
+      <div>
+        <dt>Wayland</dt>
+        <dd>Blocks global hooks, synthetic keys and tray icons. Use X11 or Xorg.</dd>
       </div>
-    </div>
-  </section>
-
-  <section id="faq">
-    <div class="wrap">
-      <h2>Questions</h2>
-
-      <div class="faq">
-        <details open>
-          <summary>Does anything leave the machine?</summary>
-          <p>No. The model is downloaded once, then the app runs with the network off.</p>
-        </details>
-
-        <details>
-          <summary>Why did the side button stop going Back?</summary>
-          <p>On Windows the hook takes the click before the browser sees it. macOS and Linux can only watch, so pick something unused there.</p>
-        </details>
-
-        <details>
-          <summary>Where does the text go?</summary>
-          <p>Onto the clipboard, then Ctrl+V or Cmd+V at the caret in the focused window.</p>
-        </details>
-
-        <details>
-          <summary>Why X11 and not Wayland?</summary>
-          <p>Wayland blocks global hooks, synthetic keys and tray icons for ordinary apps.</p>
-        </details>
-
-        <details>
-          <summary>Can I use a different shortcut?</summary>
-          <p>Tray, Shortcut, Detect, then press it. A bare letter is refused; <code>Ctrl+Alt+J</code> works immediately.</p>
-        </details>
-
-        <details>
-          <summary>Names and jargon?</summary>
-          <p>Add one term per line to <code>hotwords.txt</code>. It reloads when the file changes.</p>
-        </details>
+      <div>
+        <dt>Admin windows</dt>
+        <dd>Windows blocks synthetic keys into elevated windows. Restart as Administrator from the tray.</dd>
       </div>
-    </div>
+      <div>
+        <dt>macOS and Linux</dt>
+        <dd>Written, not run yet. Windows is the tested build.</dd>
+      </div>
+    </dl>
   </section>
 
 </main>
 
 <footer>
   <div class="wrap">
-    <div>
-      <p>type4voices. Local dictation for Windows, macOS and Linux.</p>
-      <p>Tested on Windows 11. macOS and Linux are written, not yet run on real hardware.</p>
-      <p>Code: use it as you like. Weights: Apache-2.0.</p>
-    </div>
+    <p>type4voices. Local dictation for Windows, macOS and Linux.</p>
+    <p>Code as you like. Weights Apache-2.0.</p>
     <div class="flinks">
-      <a class="plain" href="https://github.com/jaxontan/type4voices">Repository</a>
-      <a class="plain" href="https://github.com/jaxontan/type4voices/blob/main/README.md">README</a>
-      <a class="plain" href="https://github.com/jaxontan/type4voices/blob/main/MODEL_NOTES.md">Model notes</a>
+      <a href="https://github.com/jaxontan/type4voices">Repository</a>
+      <a href="https://github.com/jaxontan/type4voices/blob/main/README.md">README</a>
+      <a href="https://github.com/jaxontan/type4voices/blob/main/MODEL_NOTES.md">Model notes</a>
     </div>
   </div>
 </footer>
