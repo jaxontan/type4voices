@@ -139,7 +139,7 @@ turn it on under Settings → Personalization → Taskbar → Other system tray 
 | Action | Result |
 |---|---|
 | Hold the shortcut, speak, release | Text is pasted into the focused window |
-| Tap shorter than `min_seconds` (1 s) | Ignored, to avoid pasting noise |
+| Tap shorter than `min_seconds` (0.5 s) | Ignored, to avoid pasting noise |
 | Hold longer than `max_seconds` (120 s) | Stopped at the limit |
 | Tray → Shortcut → Detect a new shortcut… | Press any key, combination or mouse click to set it |
 | Tray → Shortcut → Side button 2 / 1 / Middle | Pick a mouse button directly |
@@ -164,6 +164,15 @@ then the transcript. On an error it says so instead of going quiet.
 The clipboard panel opens in the same spot, always expanded, and stays for 15 s.
 `auto_clipboard` keeps each transcript on the clipboard after pasting. Turn it
 off if you would rather get your previous clipboard contents back.
+
+Two checks run before anything is pasted. A clip shorter than `min_seconds`, or
+one whose loudness hardly moves (room tone, a fan, a knock on the desk), is
+dropped before the model sees it. A transcript that comes back with no letters
+or digits is dropped as well, which catches the `????` the model sometimes
+emits for noise. If the first pass comes back empty or unreadable, the app
+retries once in the last language it transcribed correctly (English by
+default), because short or accented clips often trip the language detector.
+When nothing can be pasted, the panel says so instead of staying silent.
 
 Latency on this laptop, CPU only: 2 s of speech reaches a paste in about 3 s,
 4 s of speech in about 4.5 s.
@@ -203,7 +212,7 @@ safe; restart to apply.
 | `language` | `Auto` | Pin to `English`, `Chinese`, etc. to stop language flipping on short clips. |
 | `trigger_shortcut` | `mouse:x2` | The dictation shortcut: `mouse:x1`, `mouse:x2`, `mouse:middle`, `f8`, `ctrl+alt+j`. |
 | `trigger` | `x2` | Legacy key, kept in sync for the mouse buttons so older builds still read it. |
-| `min_seconds` | `1.0` | Clips shorter than this are discarded. |
+| `min_seconds` | `0.5` | Clips shorter than this are discarded. |
 | `max_seconds` | `120.0` | Hard cap on recording length. |
 | `sample_rate` | `16000` | Capture rate. The model expects 16 kHz. |
 | `device` | `null` | `null` means the default mic, or use an input device index. |

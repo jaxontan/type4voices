@@ -30,6 +30,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 import zlib
 from typing import Any
 
@@ -80,7 +81,7 @@ DEFAULTS: dict[str, Any] = {
     "language": "Auto",
     "trigger": "x2",                  # legacy: "x2" (Forward) or "x1" (Back)
     "trigger_shortcut": "",           # e.g. "mouse:x2", "ctrl+alt+j", "f8"
-    "min_seconds": 1.0,               # ignore taps shorter than this
+    "min_seconds": 0.5,               # ignore taps shorter than this
     "max_seconds": 120.0,             # auto-stop runaway recordings
     "sample_rate": 16000,             # ASR models expect 16 kHz mono
     "device": None,                   # None = default mic, or a device index
@@ -287,6 +288,11 @@ def load_settings(path: str = CONFIG_PATH, write_if_missing: bool = True) -> Set
 
 
 # ------------------------------------------------------------ pure helpers --
+_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"))
+_WHITESPACE = re.compile(r"\s+")
+_SPACE_BEFORE_PUNCT = re.compile(r"\s+([,.!?;:)\]}]|%|°)")
+
+
 def classify_duration(seconds: float, min_seconds: float, max_seconds: float) -> str:
     """Return "short", "ok" or "long" for a recording length."""
     if seconds < min_seconds:
@@ -334,6 +340,89 @@ def trim_silence(
     if end <= start:
         return audio
     return samples[start:end]
+
+
+def speech_modulation_db(
+    audio: np.ndarray,
+    sample_rate: int = 16000,
+    frame_ms: float = 20.0,
+) -> float:
+    """How far the frame loudness swings, in dB.
+
+    Speech moves between syllables and the gaps between them, so a loud frame
+    and a quiet frame can sit 15 dB or more apart. Room tone, a fan and mains
+    hum stay within a couple of dB of themselves.
+    """
+    if audio is None or audio.size == 0:
+        return 0.0
+    samples = audio.reshape(-1).astype(np.float32, copy=False)
+    frame = max(1, int(sample_rate * frame_ms / 1000.0))
+    frames = len(samples) // frame
+    if frames < 2:
+        return 0.0
+
+    window = samples[: frames * frame].reshape(frames, frame)
+    rms = np.sqrt(np.mean(window.astype(np.float64) ** 2, axis=1))
+    db = 20.0 * np.log10(np.maximum(rms, 1e-9))
+    return float(np.percentile(db, 90.0) - np.percentile(db, 10.0))
+
+
+def looks_like_speech(
+    audio: np.ndarray,
+    sample_rate: int = 16000,
+    min_modulation_db: float = 3.0,
+    min_peak: float = 1e-3,
+) -> bool:
+    """Reject a clip that is too flat to be speech.
+
+    This is a cheap gate, not a detector. A held note would pass it, but
+    nothing that reaches a dictation shortcut sounds like a held note, while
+    the flat clips that used to produce `????` do not.
+    """
+    if audio is None or audio.size == 0:
+        return False
+    if float(np.max(np.abs(audio))) < min_peak:
+        return False
+    return speech_modulation_db(audio, sample_rate) >= min_modulation_db
+
+
+def has_words(text: str) -> bool:
+    """True when a transcript contains at least one letter or digit."""
+    return any(char.isalnum() for char in (text or ""))
+
+
+def is_pasteable(text: str) -> bool:
+    """Reject the junk the model emits when it hears noise.
+
+    Besides empty and symbol-only output (`????`), this drops transcripts with
+    replacement characters, control bytes or lone surrogates, which show up as
+    mojibake in the log and in whatever window receives the paste.
+    """
+    if not has_words(text):
+        return False
+    for char in text:
+        code = ord(char)
+        if code == 0xFFFD or 0xD800 <= code <= 0xDFFF:
+            return False
+        if code < 32 and char not in "\n\r\t":
+            return False
+    return True
+
+
+def normalize_transcript(text: str) -> str:
+    """Tidy spacing and invisible characters without changing the words.
+
+    ASR output occasionally carries zero-width characters, doubled spaces or a
+    space before a full stop. NFC leaves Chinese punctuation and accented
+    letters alone, unlike NFKC.
+    """
+    if not text:
+        return ""
+    clean = unicodedata.normalize("NFC", str(text))
+    clean = clean.translate(_INVISIBLE)
+    clean = _WHITESPACE.sub(" ", clean).strip()
+    clean = _SPACE_BEFORE_PUNCT.sub(r"\1", clean)
+    return clean
 
 
 def parse_hotwords(raw: str) -> list[str]:
@@ -844,6 +933,7 @@ class VoiceDictationApp:
         self._model_lock = threading.Lock()
         self._model_last_attempt = 0.0
         self._supported_languages: dict[str, str] | None = None
+        self._last_language = ""
 
         self._frames: list[np.ndarray] = []
         self._stream = None
@@ -941,6 +1031,16 @@ class VoiceDictationApp:
             overlay.add_entry(text)
         except Exception:
             log.debug("could not add transcript to the panel", exc_info=True)
+
+    def _notify_panel(self, message: str) -> None:
+        """Show a single line in the panel when nothing was pasted."""
+        overlay = self.overlay
+        if overlay is None or not message:
+            return
+        try:
+            overlay.notify(message)
+        except Exception:
+            log.debug("could not show a panel notice", exc_info=True)
 
     def show_clipboard_history(self) -> None:
         """Left-clicking the tray icon shows the recent clipboard items."""
@@ -1212,8 +1312,30 @@ class VoiceDictationApp:
                 self._supported_languages = {}
 
             log.info("model ready in %.1fs", time.time() - started)
+            self._warm_up(model)
             self.refresh_state()
             return self._model
+
+    def _warm_up(self, model) -> None:
+        """Run one silent second so the first real dictation is not the slow one.
+
+        The first inference after a load pays for lazy kernel setup and thread
+        pool warm-up, which shows up as an extra second of latency exactly when
+        the user is waiting for their first paste.
+        """
+        sample_rate = int(self.settings.sample_rate)
+        silence = np.zeros(sample_rate, dtype=np.float32)
+        started = time.time()
+        try:
+            model.transcribe(
+                audio=(silence, sample_rate),
+                context="",
+                language=self._effective_language(model),
+            )
+        except Exception as exc:
+            log.debug("model warm-up failed: %s", exc)
+            return
+        log.info("model warm-up in %.1fs", time.time() - started)
 
     def _effective_language(self, model) -> str | None:
         name = str(self.settings.language or "Auto").strip()
@@ -1258,14 +1380,52 @@ class VoiceDictationApp:
         if model is None:
             return ""
         sample_rate = int(self.settings.sample_rate)
+        language = self._effective_language(model)
+        text, detected = self._run_asr(model, audio, sample_rate, language)
+
+        if not is_pasteable(text):
+            # Accented or clipped speech often comes back empty, as symbols or
+            # in the wrong language, because the language detector guessed
+            # wrong. One retry in a known language is cheap: it only runs when
+            # the first attempt produced nothing usable.
+            fallback = self._fallback_language()
+            if fallback and fallback != language:
+                log.info(
+                    "retrying in %s after an unusable %s result",
+                    fallback,
+                    detected or "language-detected",
+                )
+                retry, detected_retry = self._run_asr(
+                    model, audio, sample_rate, fallback
+                )
+                if is_pasteable(retry):
+                    text, detected = retry, detected_retry
+
+        if is_pasteable(text) and detected:
+            self._last_language = detected
+            if language is None:
+                log.info("detected language: %s", detected)
+        return text
+
+    def _run_asr(self, model, audio: np.ndarray, sample_rate: int, language):
         results = model.transcribe(
             audio=(audio, sample_rate),
             context=self._context(),
-            language=self._effective_language(model),
+            language=language,
         )
-        if results:
-            return (results[0].text or "").strip()
-        return ""
+        if not results:
+            return "", ""
+        result = results[0]
+        return (result.text or "").strip(), str(getattr(result, "language", "") or "")
+
+    def _fallback_language(self) -> str | None:
+        """The language to retry in: the last good one, else English."""
+        supported = self._supported_languages or {}
+        for name in (self._last_language, "English"):
+            resolved = supported.get(str(name or "").lower())
+            if resolved:
+                return resolved
+        return None
 
     # -- audio ------------------------------------------------------------
     def _audio_callback(self, indata, frames, time_info, status):
@@ -1314,6 +1474,10 @@ class VoiceDictationApp:
                     channels=1,
                     dtype="float32",
                     device=self.settings.device,
+                    # 64 ms blocks. The default is 0, which lets PortAudio pick
+                    # tiny blocks; the log showed "input overflow" whenever the
+                    # model pegged the CPU, and a larger block rides that out.
+                    blocksize=1024,
                     callback=self._audio_callback,
                     finished_callback=self._on_stream_finished,
                 )
@@ -1382,6 +1546,7 @@ class VoiceDictationApp:
 
         if not frames:
             log.info("no audio captured (microphone not ready)")
+            self._notify_panel("Microphone not ready")
             self.refresh_state()
             return
 
@@ -1403,6 +1568,7 @@ class VoiceDictationApp:
                 seconds,
                 float(self.settings.min_seconds),
             )
+            self._notify_panel("Hold the shortcut while you speak")
             self.refresh_state()
             return
 
@@ -1417,6 +1583,16 @@ class VoiceDictationApp:
             seconds = len(audio) / float(self.settings.sample_rate)
 
         if seconds < float(self.settings.min_seconds):
+            self.refresh_state()
+            return
+
+        if not looks_like_speech(audio, int(self.settings.sample_rate)):
+            log.info(
+                "ignored a flat %.2fs clip (no speech modulation); "
+                "check the microphone",
+                seconds,
+            )
+            self._notify_panel("Heard nothing. Check the microphone")
             self.refresh_state()
             return
 
@@ -1449,7 +1625,7 @@ class VoiceDictationApp:
                 if self._model is None and self.model_error is None:
                     self.load_model()
                 started = time.time()
-                raw_text = self.transcribe(audio)
+                raw_text = normalize_transcript(self.transcribe(audio))
                 text = postprocess_text(raw_text) if self.cleanup_enabled else raw_text
                 elapsed = time.time() - started
 
@@ -1457,12 +1633,21 @@ class VoiceDictationApp:
                     log.debug("raw transcript: %r", raw_text)
                 log.info("transcribed in %.2fs: %r", elapsed, text)
 
+                dropped = False
+                if text and not is_pasteable(text):
+                    log.info("discarded a transcript that is not clean text")
+                    text = ""
+                    dropped = True
+                    self._notify_panel("Nothing clear enough to paste")
+
                 if text and self.running:
                     self.last_text = text
                     self._add_overlay_entry(text)
                     self.paste_text(text)
                 elif not text:
                     log.info("no speech detected")
+                    if not dropped:
+                        self._notify_panel("Heard nothing. Check the microphone")
             except Exception:
                 log.exception("transcription failed")
             finally:

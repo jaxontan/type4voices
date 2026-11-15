@@ -58,5 +58,6 @@ this hardware; see the *Troubleshooting* section of `README.md`.
 `config.json` accepts `"language": "Auto"` or any language name the model
 reports (see `Qwen3ASRModel.get_supported_languages()`). `Auto` is convenient
 but the language detector can flip on clips under ~1 second or on noisy audio,
-which is why `min_seconds` defaults to 1.0. Pin the language if you only ever
+which is why `min_seconds` defaults to 0.5 and a clip with no loudness
+movement is dropped before transcription. Pin the language if you only ever
 dictate in one.

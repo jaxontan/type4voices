@@ -65,6 +65,71 @@ class TrimSilenceTests(unittest.TestCase):
         self.assertGreaterEqual(len(trimmed), len(quiet) * 0.95)
 
 
+class SpeechGateTests(unittest.TestCase):
+    SR = 16000
+
+    @staticmethod
+    def syllables(scale: float = 0.15) -> np.ndarray:
+        """Four 120 ms blobs with gaps, the way speech hits a frame meter."""
+        audio = np.zeros(2 * SpeechGateTests.SR, np.float32)
+        step = int(0.3 * SpeechGateTests.SR)
+        length = int(0.12 * SpeechGateTests.SR)
+        wave = scale * np.sin(2 * np.pi * 180 * np.arange(length) / SpeechGateTests.SR)
+        for index in range(4):
+            start = int(0.15 * SpeechGateTests.SR) + index * step
+            audio[start : start + length] = wave.astype(np.float32)
+        return audio
+
+    def test_silence_is_not_speech(self):
+        self.assertFalse(dictate.looks_like_speech(np.zeros(self.SR, np.float32), self.SR))
+
+    def test_empty_is_not_speech(self):
+        self.assertFalse(dictate.looks_like_speech(np.zeros(0, np.float32), self.SR))
+
+    def test_steady_noise_is_not_speech(self):
+        noise = np.random.default_rng(1).normal(0, 0.003, self.SR).astype(np.float32)
+        self.assertLess(dictate.speech_modulation_db(noise, self.SR), 3.0)
+        self.assertFalse(dictate.looks_like_speech(noise, self.SR))
+
+    def test_faint_hiss_is_not_speech(self):
+        noise = np.random.default_rng(2).normal(0, 1e-5, self.SR).astype(np.float32)
+        self.assertFalse(dictate.looks_like_speech(noise, self.SR))
+
+    def test_syllables_count_as_speech(self):
+        audio = self.syllables()
+        self.assertGreaterEqual(dictate.speech_modulation_db(audio, self.SR), 3.0)
+        self.assertTrue(dictate.looks_like_speech(audio, self.SR))
+
+    def test_quiet_syllables_still_pass(self):
+        # A quiet room and a mic at 10% gain should not be mistaken for noise.
+        self.assertTrue(dictate.looks_like_speech(self.syllables(0.02), self.SR))
+
+
+class TranscriptGateTests(unittest.TestCase):
+    def test_has_words_accepts_speech_and_numbers(self):
+        self.assertTrue(dictate.has_words("Hello"))
+        self.assertTrue(dictate.has_words("4:30"))
+        self.assertTrue(dictate.has_words("你好"))
+        self.assertTrue(dictate.has_words("ok."))
+
+    def test_has_words_rejects_empty_and_symbols(self):
+        self.assertFalse(dictate.has_words(""))
+        self.assertFalse(dictate.has_words("   "))
+        self.assertFalse(dictate.has_words("????"))
+        self.assertFalse(dictate.has_words("... !!! ??"))
+        self.assertFalse(dictate.has_words(None))
+
+    def test_pasteable_accepts_plain_text(self):
+        self.assertTrue(dictate.is_pasteable("The meeting is at 4:30."))
+        self.assertTrue(dictate.is_pasteable("你好，世界。"))
+
+    def test_pasteable_rejects_symbols_and_mojibake(self):
+        self.assertFalse(dictate.is_pasteable(""))
+        self.assertFalse(dictate.is_pasteable("????"))
+        self.assertFalse(dictate.is_pasteable("r-\ufffdo%?\ufffd\ufffd"))
+        self.assertFalse(dictate.is_pasteable("bad\x07text"))
+
+
 class HotwordTests(unittest.TestCase):
     def test_parse_hotwords_handles_comments_blanks_and_duplicates(self):
         raw = "OpenCode\n\n# a comment\n  PyTorch  \nopencode\nQwen3-ASR # trailing\n"
@@ -94,8 +159,8 @@ class SettingsTests(unittest.TestCase):
         settings = dictate.load_settings(self.path)
         self.assertTrue(os.path.exists(self.path))
         self.assertEqual(settings.model_id, dictate.DEFAULTS["model_id"])
-        self.assertEqual(settings.min_seconds, 1.0)
-        self.assertGreaterEqual(settings.min_seconds, 1.0)
+        self.assertEqual(settings.min_seconds, 0.5)
+        self.assertGreaterEqual(settings.min_seconds, 0.2)
 
     def test_values_are_coerced_and_clamped(self):
         with open(self.path, "w", encoding="utf-8") as handle:
@@ -132,7 +197,7 @@ class SettingsTests(unittest.TestCase):
         with open(self.path, "w", encoding="utf-8") as handle:
             handle.write("{not json")
         settings = dictate.load_settings(self.path)
-        self.assertEqual(settings.min_seconds, 1.0)
+        self.assertEqual(settings.min_seconds, 0.5)
 
     def test_save_round_trip(self):
         settings = dictate.load_settings(self.path)
@@ -312,6 +377,109 @@ class TextCleanupIntegrationTests(unittest.TestCase):
         )
 
 
+class NormalizeTests(unittest.TestCase):
+    def test_collapses_spaces_and_trims(self):
+        self.assertEqual(dictate.normalize_transcript("  hello   world  "), "hello world")
+
+    def test_removes_zero_width_characters(self):
+        self.assertEqual(dictate.normalize_transcript("he\u200bllo\ufeff"), "hello")
+
+    def test_tightens_space_before_punctuation(self):
+        self.assertEqual(dictate.normalize_transcript("Hello , world ."), "Hello, world.")
+
+    def test_leaves_chinese_text_and_punctuation_alone(self):
+        self.assertEqual(dictate.normalize_transcript(" 你好，世界。 "), "你好，世界。")
+
+    def test_empty_text(self):
+        self.assertEqual(dictate.normalize_transcript(""), "")
+        self.assertEqual(dictate.normalize_transcript(None), "")
+
+
+class _FakeResult:
+    def __init__(self, text, language):
+        self.text = text
+        self.language = language
+
+
+class _FakeModel:
+    """Returns per-language canned answers and records the calls."""
+
+    def __init__(self, answers):
+        self.answers = answers
+        self.calls = []
+
+    def transcribe(self, audio=None, context="", language=None):
+        self.calls.append(language)
+        text = self.answers.get(language)
+        if not text:
+            return []
+        return [_FakeResult(text, language or "English")]
+
+    def get_supported_languages(self):
+        return ["English", "Chinese"]
+
+
+class LanguageRetryTests(unittest.TestCase):
+    """A failed first pass gets one retry in a known language."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.settings = dictate.load_settings(os.path.join(self.tmp.name, "config.json"))
+        self.app = dictate.VoiceDictationApp(self.settings)
+        self.app.running = False
+        self.app.overlay = None
+        self.app._supported_languages = {"english": "English", "chinese": "Chinese"}
+        self.audio = np.zeros(16000, np.float32)
+
+    def tearDown(self):
+        self.app.running = False
+        self.tmp.cleanup()
+
+    def test_retries_in_english_when_auto_returns_nothing(self):
+        self.settings.set("language", "Auto", persist=False)
+        model = _FakeModel({None: "", "English": "Hello there"})
+        self.app._model = model
+        self.assertEqual(self.app.transcribe(self.audio), "Hello there")
+        self.assertEqual(model.calls, [None, "English"])
+
+    def test_retries_when_auto_returns_only_symbols(self):
+        self.settings.set("language", "Auto", persist=False)
+        model = _FakeModel({None: "????", "English": "Send it"})
+        self.app._model = model
+        self.assertEqual(self.app.transcribe(self.audio), "Send it")
+        self.assertEqual(model.calls, [None, "English"])
+
+    def test_no_retry_when_the_first_pass_is_usable(self):
+        self.settings.set("language", "Auto", persist=False)
+        model = _FakeModel({None: "Hello there"})
+        self.app._model = model
+        self.assertEqual(self.app.transcribe(self.audio), "Hello there")
+        self.assertEqual(model.calls, [None])
+
+    def test_retry_uses_the_last_good_language(self):
+        self.settings.set("language", "Auto", persist=False)
+        self.app._last_language = "Chinese"
+        model = _FakeModel({"Chinese": "你好", "English": "Hello"})
+        self.app._model = model
+        self.assertEqual(self.app.transcribe(self.audio), "你好")
+        self.assertEqual(model.calls, [None, "Chinese"])
+
+    def test_pinned_language_does_not_retry_in_itself(self):
+        self.settings.set("language", "Chinese", persist=False)
+        model = _FakeModel({"Chinese": "", "English": "Hello"})
+        self.app._model = model
+        self.app._last_language = "Chinese"
+        self.assertEqual(self.app.transcribe(self.audio), "")
+        self.assertEqual(model.calls, ["Chinese"])
+
+    def test_empty_both_passes_stays_empty(self):
+        self.settings.set("language", "Auto", persist=False)
+        model = _FakeModel({None: "", "English": ""})
+        self.app._model = model
+        self.assertEqual(self.app.transcribe(self.audio), "")
+        self.assertEqual(model.calls, [None, "English"])
+
+
 class StreamRecoveryTests(unittest.TestCase):
     """Regression tests for the audio-stream status handling.
 
@@ -363,6 +531,23 @@ class TranscriptPanelTests(unittest.TestCase):
         self.assertTrue(self.settings.overlay_enabled)
         self.assertGreater(self.settings.overlay_hide_after, 0.0)
         self.assertGreaterEqual(self.settings.overlay_max_entries, 1)
+
+    def test_notice_shows_instead_of_the_last_transcript(self):
+        panel = overlay.TranscriptOverlay(self.settings)
+        panel._state = "idle"
+        panel._entries = [("09:00", "an older transcript")]
+        panel.notify("Heard nothing. Check the microphone")
+        kind, value, extra = panel._queue.get_nowait()
+        self.assertEqual(kind, "notice")
+        self.assertEqual(value, "Heard nothing. Check the microphone")
+        self.assertGreater(extra, 0.0)
+
+        panel._notice = value
+        self.assertEqual(panel._status_text(), "Heard nothing. Check the microphone")
+
+    def test_a_failed_paste_never_raises_without_a_panel(self):
+        self.app.overlay = None
+        self.app._notify_panel("Heard nothing")
 
     def test_elapsed_clock(self):
         self.assertEqual(overlay.format_elapsed(0), "0:00")

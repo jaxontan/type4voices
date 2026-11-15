@@ -102,6 +102,7 @@ class TranscriptOverlay:
         self._mode = "transcript"
         self._clipboard: list[str] = []
         self._flash = ""
+        self._notice = ""
 
         # Shortcut recorder view.
         self._capture_preview = ""
@@ -138,6 +139,10 @@ class TranscriptOverlay:
 
     def add_entry(self, text: str) -> None:
         self._queue.put(("entry", text, None))
+
+    def notify(self, text: str, seconds: float = 5.0) -> None:
+        """Show one line for a few seconds without adding it to the history."""
+        self._queue.put(("notice", str(text or ""), float(seconds)))
 
     def clear_history(self) -> None:
         self._queue.put(("clear", None, None))
@@ -250,6 +255,9 @@ class TranscriptOverlay:
             self._flash = ""
             self._state = value or "idle"
             self._started_at = extra or time.time()
+            if self._state == "recording":
+                # A new recording makes any "heard nothing" line stale.
+                self._notice = ""
             if self._state == "idle":
                 self._stop_timer()
                 self._visible = True
@@ -280,6 +288,15 @@ class TranscriptOverlay:
                 self._build()
                 self._place()
                 self._schedule_hide()
+        elif kind == "notice":
+            self._mode = "transcript"
+            self._stop_timer()
+            self._cancel_hide()
+            self._notice = str(value or "")
+            self._visible = True
+            self._build()
+            self._place()
+            self._schedule_hide(delay=float(extra or 5.0))
         elif kind == "clear":
             self._entries.clear()
             self._build()
@@ -604,6 +621,8 @@ class TranscriptOverlay:
         if self._expanded and self._entries:
             count = len(self._entries)
             return f"Transcript history · {count}" if count > 1 else "Transcript history"
+        if self._notice:
+            return self._notice
         if self._entries:
             return _one_line(self._entries[0][1])
         return "Ready — hold your shortcut to dictate"
@@ -719,6 +738,7 @@ class TranscriptOverlay:
     def _hide(self) -> None:
         self._hide_job = None
         self._visible = False
+        self._notice = ""
         self._place(hidden=True)
 
     # -- events -----------------------------------------------------------
