@@ -1,7 +1,9 @@
 @echo off
 setlocal
 title Voice Dictation - Setup
-cd /d "%~dp0"
+cd /d "%~dp0.."
+
+set "APP_DIR=%CD%"
 
 echo ============================================================
 echo  Voice Dictation - first-time setup
@@ -20,7 +22,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Creating virtual environment in .venv ...
+echo Creating virtual environment in "%APP_DIR%\.venv" ...
 py -3.12 -m venv .venv
 if errorlevel 1 (
     echo [ERROR] Could not create the virtual environment.

@@ -40,7 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         from huggingface_hub import snapshot_download
     except ImportError:
-        print("huggingface_hub is missing; run setup.bat first.", file=sys.stderr)
+        print(
+            "huggingface_hub is missing; run the setup script for your system "
+            "(windows\\setup.bat, macos/setup.sh or linux/setup.sh) first.",
+            file=sys.stderr,
+        )
         return 1
 
     try:

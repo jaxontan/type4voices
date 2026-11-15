@@ -1,10 +1,11 @@
 #!/bin/sh
 # macOS: double-click this file in Finder to start Voice Dictation with a
 # console that stays open, so errors are readable.
-cd "$(dirname "$0")" || exit 1
+# The app lives in the folder above this one.
+cd "$(dirname "$0")/.." || exit 1
 
 if [ ! -x .venv/bin/python ]; then
-    echo "No .venv found. Run setup.sh first (Terminal: ./setup.sh)."
+    echo "No .venv found. Run ./setup.sh in the macos folder first."
     printf "Press Return to close."
     read -r _
     exit 1

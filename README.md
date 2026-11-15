@@ -31,10 +31,13 @@ not been run on real hardware yet. See [Platform notes](#platform-notes).
 You need Python 3.10 or newer. The environment and the model take about 6 GB
 together, most of it the model.
 
+The Python code is shared. Each system has its own folder with the launchers,
+and all of them create `.venv` in this folder and run `dictate.py` from here.
+
 ### Windows
 
 1. Install Python 3.12 and tick *Add python.exe to PATH*.
-2. Double-click `setup.bat`. It creates `.venv`, installs the pinned
+2. Double-click `windows\setup.bat`. It creates `.venv`, installs the pinned
    dependencies and runs the environment check.
 3. Download the model once (about 4.4 GB, needs internet):
 
@@ -42,22 +45,25 @@ together, most of it the model.
    .venv\Scripts\python.exe download_model.py
    ```
 
-4. Start it with `run_dictate.bat` for a console window,
-   `run_dictate_background.vbs` for none, or tick *Start with Windows* in the
-   tray menu.
+4. Start it with `windows\run_dictate.bat` for a console window or
+   `windows\run_dictate_background.vbs` for none. Ticking *Start with Windows*
+   in the tray menu sets up autostart, so neither file is needed after that.
 
 ### macOS
 
 1. Install Python 3.12 from python.org. The system Python has no tkinter.
-2. In Terminal, in this folder:
+2. In Terminal, from this folder:
 
    ```sh
+   cd macos
    chmod +x setup.sh run_dictate.sh run_dictate_background.sh run_dictate.command
    ./setup.sh
+   cd ..
    .venv/bin/python download_model.py
    ```
 
-3. Start it with `./run_dictate.sh`, or double-click `run_dictate.command`.
+3. Start it with `./macos/run_dictate.sh`, or double-click
+   `macos/run_dictate.command` in Finder.
 4. Allow Microphone, Accessibility and Input Monitoring when macOS asks, or add
    them under System Settings → Privacy & Security. Restart the app after
    changing Accessibility or Input Monitoring.
@@ -75,10 +81,12 @@ together, most of it the model.
 2. Then:
 
    ```sh
+   cd linux
    chmod +x setup.sh run_dictate.sh run_dictate_background.sh
    ./setup.sh
+   cd ..
    .venv/bin/python download_model.py
-   ./run_dictate.sh
+   ./linux/run_dictate.sh
    ```
 
 3. Log in to an X11/Xorg session. Wayland does not let ordinary applications
@@ -294,6 +302,10 @@ torch enables the Arc GPU:
 
 ## Project layout
 
+The application code sits at the top level and is the same for every system.
+The launchers are grouped by system, one folder each, and all of them run the
+code from the folder above.
+
 ```
 dictate.py                 app: tray, audio, queue, paste, CLI, config
 trigger.py                 shortcut backend (Windows hooks / pynput)
@@ -310,14 +322,21 @@ landing.html               single-file page, open in any browser
 config.json                created on first run
 hotwords.txt               optional domain words
 dictate.log                rotating log (1 MB, 3 files)
-setup.bat / setup.sh       create .venv and install dependencies
-run_dictate.bat            Windows foreground launcher
-run_dictate_background.vbs Windows launcher, no console
-run_dictate.sh             macOS/Linux foreground launcher
-run_dictate_background.sh  macOS/Linux launcher, no terminal
-run_dictate.command        macOS double-click launcher
-suppress_xbutton2.ahk      optional legacy AutoHotkey suppresser
 MODEL_NOTES.md             model choice, licensing, alternatives
+```
+
+```
+windows/setup.bat              create .venv and install dependencies
+windows/run_dictate.bat        foreground launcher, console window
+windows/run_dictate_background.vbs  launcher with no console
+windows/suppress_xbutton2.ahk  optional legacy AutoHotkey suppresser
+macos/setup.sh                 create .venv and install dependencies
+macos/run_dictate.sh           foreground launcher
+macos/run_dictate_background.sh  launcher with no terminal
+macos/run_dictate.command      double-click launcher for Finder
+linux/setup.sh                 create .venv and install dependencies
+linux/run_dictate.sh           foreground launcher
+linux/run_dictate_background.sh  launcher with no terminal
 ```
 
 ### How a dictation flows

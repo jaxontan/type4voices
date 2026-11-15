@@ -1,9 +1,10 @@
 #!/usr/bin/env sh
-# Create .venv, install the pinned dependencies and run the environment check.
-# Works on macOS and Linux. On Windows use setup.bat instead.
+# macOS: create .venv, install the pinned dependencies and run the environment
+# check. The app lives in the folder above this one, so everything is written
+# there. For Windows use windows/setup.bat, for Linux linux/setup.sh.
 set -eu
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 PYTHON="${PYTHON:-}"
 if [ -z "$PYTHON" ]; then

@@ -1,12 +1,12 @@
 #!/usr/bin/env sh
-# Start Voice Dictation without a terminal window on macOS/Linux.
+# Linux: start Voice Dictation without a terminal window.
 # Close it from the tray menu (Quit) or with: pkill -f dictate.py
 set -eu
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 if [ ! -x .venv/bin/python ]; then
-    echo "No .venv found. Run ./setup.sh first."
+    echo "No .venv found. Run ./setup.sh in the linux folder first."
     exit 1
 fi
 
