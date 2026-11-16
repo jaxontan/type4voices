@@ -217,6 +217,22 @@ def _convert_numbers(text: str) -> str:
 # ---------------------------------------------------------------------------
 # Fillers
 # ---------------------------------------------------------------------------
+_AH_WORD_RE = re.compile(r"(?i)ah+")
+
+
+def _is_ah_particle(text: str, start: int) -> bool:
+    """True for a clause-final "ah", as in "like that also can ah?".
+
+    Singapore and Malaysian English use it to soften a question or a
+    statement, so it carries meaning and is not a hesitation sound.
+    """
+    match = _AH_WORD_RE.match(text, start)
+    if not match:
+        return False
+    rest = text[match.end():].lstrip(" \t")
+    return not rest or rest[0] in "?!."
+
+
 _FILLER_RE = re.compile(
     r"(?i)(?<![\w-])(?:uh+|um+|ah+|erm|hmm+)"
     r"(?![\w-])(?![ \t]*,?[ \t]*(?:oh|ha)\b)"
@@ -226,6 +242,8 @@ _FILLER_RE = re.compile(
 
 def _remove_fillers(text: str) -> str:
     def repl(match: re.Match[str]) -> str:
+        if _is_ah_particle(text, match.start()):
+            return match.group(0)
         before = text[:match.start()].rstrip()
         at_sentence_start = (
             not before or before[-1] in ".?!\n\"'“‘"

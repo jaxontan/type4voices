@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import tempfile
+import types
 import unittest
 
 import numpy as np
@@ -129,6 +130,72 @@ class TranscriptGateTests(unittest.TestCase):
         self.assertFalse(dictate.is_pasteable("r-\ufffdo%?\ufffd\ufffd"))
         self.assertFalse(dictate.is_pasteable("bad\x07text"))
 
+    def test_echoes_context_drops_repeated_prompt_sentences(self):
+        context = dictate.compose_context(["PyTorch", "lah"], "Malaysian accent.")
+        self.assertTrue(dictate.echoes_context("This is a dictation session.", context))
+        self.assertTrue(dictate.echoes_context("this is a dictation session", context))
+        self.assertTrue(dictate.echoes_context("Malaysian accent.", context))
+
+    def test_echoes_context_keeps_real_speech(self):
+        context = dictate.compose_context(["PyTorch", "lah"], "Malaysian accent.")
+        self.assertFalse(dictate.echoes_context("PyTorch.", context))
+        self.assertFalse(dictate.echoes_context("This is a test.", context))
+        self.assertFalse(dictate.echoes_context("Hello.", ""))
+        self.assertFalse(dictate.echoes_context("", context))
+
+
+class LoudnessTests(unittest.TestCase):
+    def test_quiet_speech_is_boosted_to_target(self):
+        t = np.linspace(0, 1, 16000, dtype=np.float32)
+        quiet = (0.078 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+        boosted, gain = dictate.normalize_loudness(quiet)
+        self.assertGreater(gain, 6.0)
+        self.assertAlmostEqual(float(np.percentile(np.abs(boosted), 99.9)), 0.5, places=2)
+        self.assertEqual(boosted.dtype, np.float32)
+
+    def test_loud_audio_is_untouched(self):
+        loud = np.full(1600, 0.7, dtype=np.float32)
+        out, gain = dictate.normalize_loudness(loud)
+        self.assertEqual(gain, 1.0)
+        self.assertIs(out, loud)
+
+    def test_gain_is_capped_and_clipped(self):
+        faint = np.full(1600, 0.001, dtype=np.float32)
+        faint[0] = 0.9  # one click must not hold the gain down
+        out, gain = dictate.normalize_loudness(faint, max_gain=20.0)
+        self.assertEqual(gain, 20.0)
+        self.assertLessEqual(float(np.max(np.abs(out))), 1.0)
+
+    def test_silence_and_empty(self):
+        self.assertEqual(dictate.normalize_loudness(np.zeros(100, dtype=np.float32))[1], 1.0)
+        self.assertEqual(dictate.normalize_loudness(np.zeros(0, dtype=np.float32))[1], 1.0)
+
+
+class DeviceTests(unittest.TestCase):
+    @staticmethod
+    def fake_torch(xpu=False, cuda=False, mps=False):
+        flag = lambda value: types.SimpleNamespace(is_available=lambda: value)
+        return types.SimpleNamespace(
+            xpu=flag(xpu),
+            cuda=flag(cuda),
+            backends=types.SimpleNamespace(mps=flag(mps)),
+        )
+
+    def test_auto_prefers_a_gpu(self):
+        self.assertEqual(dictate.resolve_torch_device("auto", self.fake_torch(xpu=True)), "xpu")
+        self.assertEqual(dictate.resolve_torch_device("auto", self.fake_torch(cuda=True)), "cuda")
+        self.assertEqual(dictate.resolve_torch_device("auto", self.fake_torch(mps=True)), "mps")
+
+    def test_auto_falls_back_to_cpu(self):
+        self.assertEqual(dictate.resolve_torch_device("auto", self.fake_torch()), "cpu")
+        self.assertEqual(dictate.resolve_torch_device(None, self.fake_torch()), "cpu")
+
+    def test_explicit_device_is_kept(self):
+        self.assertEqual(dictate.resolve_torch_device("CPU", self.fake_torch(xpu=True)), "cpu")
+
+    def test_cpu_load_kwargs_are_empty(self):
+        self.assertEqual(dictate.model_load_kwargs("cpu"), {})
+
 
 class HotwordTests(unittest.TestCase):
     def test_parse_hotwords_handles_comments_blanks_and_duplicates(self):
@@ -145,6 +212,19 @@ class HotwordTests(unittest.TestCase):
         self.assertEqual(dictate.compose_context([]), "")
         context = dictate.compose_context(["OpenCode", "PyTorch"])
         self.assertIn("OpenCode, PyTorch", context)
+
+    def test_compose_context_includes_accent_note(self):
+        context = dictate.compose_context([], "Malaysian accent.")
+        self.assertEqual(
+            context, "This is a dictation session. Malaysian accent."
+        )
+        self.assertIn("lah, leh", dictate.compose_context(["lah", "leh"]))
+
+    def test_looks_like_english(self):
+        self.assertTrue(dictate.looks_like_english("English"))
+        self.assertTrue(dictate.looks_like_english("english"))
+        self.assertTrue(dictate.looks_like_english(""))
+        self.assertFalse(dictate.looks_like_english("Chinese"))
 
 
 class SettingsTests(unittest.TestCase):
@@ -198,6 +278,13 @@ class SettingsTests(unittest.TestCase):
             handle.write("{not json")
         settings = dictate.load_settings(self.path)
         self.assertEqual(settings.min_seconds, 0.5)
+
+    def test_bom_saved_config_is_read(self):
+        with open(self.path, "w", encoding="utf-8-sig") as handle:
+            json.dump({"language": "English", "min_seconds": 0.8}, handle)
+        settings = dictate.load_settings(self.path)
+        self.assertEqual(settings.language, "English")
+        self.assertEqual(settings.min_seconds, 0.8)
 
     def test_save_round_trip(self):
         settings = dictate.load_settings(self.path)
@@ -464,6 +551,34 @@ class LanguageRetryTests(unittest.TestCase):
         self.assertEqual(self.app.transcribe(self.audio), "你好")
         self.assertEqual(model.calls, [None, "Chinese"])
 
+    def test_pinned_english_retries_with_detection(self):
+        self.settings.set("language", "English", persist=False)
+        model = _FakeModel({"English": "", None: "Hello there"})
+        self.app._model = model
+        self.assertEqual(self.app.transcribe(self.audio), "Hello there")
+        self.assertEqual(model.calls, ["English", None])
+
+    def test_pinned_english_rejects_a_non_english_detection(self):
+        self.settings.set("language", "English", persist=False)
+
+        class Model:
+            def __init__(self):
+                self.calls = []
+
+            def transcribe(self, audio=None, context="", language=None):
+                self.calls.append(language)
+                if language == "English":
+                    return []
+                return [_FakeResult("你好", "Chinese")]
+
+            def get_supported_languages(self):
+                return ["English", "Chinese"]
+
+        model = Model()
+        self.app._model = model
+        self.assertEqual(self.app.transcribe(self.audio), "")
+        self.assertEqual(model.calls, ["English", None])
+
     def test_pinned_language_does_not_retry_in_itself(self):
         self.settings.set("language", "Chinese", persist=False)
         model = _FakeModel({"Chinese": "", "English": "Hello"})
@@ -630,6 +745,119 @@ class ClipboardTests(unittest.TestCase):
         preview = overlay.clipboard_preview("word " * 80)
         self.assertLessEqual(len(preview), 150)
         self.assertTrue(preview.endswith("…"))
+
+
+class _FakeRewriter:
+    def __init__(self, model_id, ok=True):
+        self.model_id = model_id
+        self._ok = ok
+        self.ready = False
+        self.closed = False
+        self.error = None
+
+    def load(self):
+        self.ready = self._ok
+        self.error = None if self._ok else "OSError: missing"
+        return self._ok
+
+    def close(self):
+        self.closed = True
+        self.ready = False
+
+    def rewrite(self, text, **kwargs):
+        return f"[{self.model_id}] {text}"
+
+
+class RewriterSwapTests(unittest.TestCase):
+    """Swapping the English fixer from the tray."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.settings = dictate.load_settings(os.path.join(self.tmp.name, "config.json"))
+        self.app = dictate.VoiceDictationApp(self.settings)
+        self.app.running = False
+        self.app.device = "cpu"
+        self.made: list[_FakeRewriter] = []
+        self.broken: set[str] = set()
+
+        def make(model_id):
+            r = _FakeRewriter(model_id, ok=model_id not in self.broken)
+            self.made.append(r)
+            return r
+
+        self.app._make_rewriter = make
+
+        # Run loads inline so the tests are deterministic.
+        class _Inline:
+            def __init__(self, target, args=(), **_kw):
+                self.target, self.args = target, args
+
+            def start(self):
+                self.target(*self.args)
+
+        import threading
+        from unittest import mock
+
+        inline = types.SimpleNamespace(Thread=_Inline, Lock=threading.Lock)
+        patcher = mock.patch.object(dictate, "threading", inline)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_swap_frees_the_old_model_and_persists(self):
+        self.app._ensure_rewriter()
+        qwen = self.made[0]
+        self.assertEqual(self.app.maybe_rewrite("one two three"), "[Qwen/Qwen3-1.7B] one two three")
+        self.app.set_rewrite_model("google/gemma-4-E2B-it")
+        self.assertTrue(qwen.closed)
+        self.assertEqual(
+            self.app.maybe_rewrite("one two three"), "[google/gemma-4-E2B-it] one two three"
+        )
+        self.assertEqual(
+            dictate.load_settings(self.settings.path).rewrite_model, "google/gemma-4-E2B-it"
+        )
+        self.app.set_rewrite_model("Qwen/Qwen3-1.7B")
+        self.assertEqual(self.app.maybe_rewrite("one two three"), "[Qwen/Qwen3-1.7B] one two three")
+
+    def test_failed_model_falls_back_to_default_and_is_not_retried(self):
+        self.broken.add("google/gemma-4-E2B-it")
+        self.app.set_rewrite_model("google/gemma-4-E2B-it")
+        self.assertEqual(self.app.maybe_rewrite("one two three"), "[Qwen/Qwen3-1.7B] one two three")
+        count = len(self.made)
+        self.app.maybe_rewrite("four five six")
+        self.assertEqual(len(self.made), count)  # no reload on every dictation
+        # Picking it again in the tray retries.
+        self.broken.clear()
+        self.app.set_rewrite_model("google/gemma-4-E2B-it")
+        self.assertEqual(
+            self.app.maybe_rewrite("one two three"), "[google/gemma-4-E2B-it] one two three"
+        )
+
+    def test_gemma_frees_the_current_model_before_loading(self):
+        self.app._ensure_rewriter()
+        qwen = self.made[0]
+        seen = []
+        real_make = self.app._make_rewriter
+
+        def make(model_id):
+            seen.append(qwen.closed)  # was the old one freed before this load?
+            return real_make(model_id)
+
+        self.app._make_rewriter = make
+        self.app.set_rewrite_model("google/gemma-4-E2B-it")
+        self.assertEqual(seen, [True])
+
+    def test_old_model_serves_while_new_one_loads(self):
+        self.app._ensure_rewriter()
+        self.app._rewriter_loading = "google/gemma-4-E2B-it"  # load in progress
+        self.settings.set("rewrite_model", "google/gemma-4-E2B-it", persist=False)
+        self.assertEqual(self.app.maybe_rewrite("one two three"), "[Qwen/Qwen3-1.7B] one two three")
+
+    def test_worker_python_default_and_override(self):
+        self.assertIn(".venv-t5", dictate.worker_python(""))
+        self.assertEqual(dictate.worker_python("C:/py/python.exe"), "C:/py/python.exe")
 
 
 if __name__ == "__main__":

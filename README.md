@@ -2,13 +2,16 @@
 
 Local voice typing for Windows, macOS and Linux. Hold a shortcut, speak, let go,
 and the text appears at the cursor in whichever window has focus. Qwen3-ASR does
-the transcription on your machine. Audio, text and telemetry stay there.
+the transcription on your machine, and a small local language model then repairs
+weak or misheard English into what you meant. Audio, text and telemetry stay
+there.
 
 The default shortcut is the second mouse side button (Forward). You can record
 any key, key combination or mouse click instead, from the tray menu.
 
 Windows 11 is the platform this was built and tested on: Core Ultra 5 228V,
-Arc 130V, 31.5 GB RAM, Python 3.12, CPU inference. The macOS and Linux paths use
+Arc 130V, 31.5 GB RAM, Python 3.12, inference on the Arc GPU (torch XPU build).
+The macOS and Linux paths use
 the same code with the OS-specific parts in `platform_support.py`, but they have
 not been run on real hardware yet. See [Platform notes](#platform-notes).
 
@@ -23,13 +26,16 @@ not been run on real hardware yet. See [Platform notes](#platform-notes).
 - The transcript stays on the clipboard after pasting. Left-click the traffic
   light to see the last five clipboard items and click one to copy it back.
 - Spoken numbers, punctuation and filler words are cleaned up before pasting.
+- Weak grammar and misheard words are rewritten into clean English by a local
+  LLM ("I already tell him many time" → "I've already told him many times").
+  See [Fixing weak English](#fixing-weak-english).
 - On Windows the shortcut is swallowed before the focused app sees it, so the
   side button no longer navigates the browser.
 
 ## Install
 
-You need Python 3.10 or newer. The environment and the model take about 6 GB
-together, most of it the model.
+You need Python 3.10 or newer. The environment, the speech model (4.4 GB) and
+the English fixer (3.4 GB) take about 10 GB together.
 
 The Python code is shared. Each system has its own folder with the launchers,
 and all of them create `.venv` in this folder and run `dictate.py` from here.
@@ -39,11 +45,16 @@ and all of them create `.venv` in this folder and run `dictate.py` from here.
 1. Install Python 3.12 and tick *Add python.exe to PATH*.
 2. Double-click `windows\setup.bat`. It creates `.venv`, installs the pinned
    dependencies and runs the environment check.
-3. Download the model once (about 4.4 GB, needs internet):
+3. Download the two models once (about 8 GB, needs internet):
 
    ```
    .venv\Scripts\python.exe download_model.py
+   .venv\Scripts\python.exe download_model.py --model Qwen/Qwen3-1.7B
    ```
+
+   Without the second one the app still works; it just pastes the transcript
+   without the English fix. On an Intel Arc / Core Ultra laptop, also install
+   the GPU build of torch (see [It feels slow](#it-feels-slow)).
 
 4. Start it with `windows\run_dictate.bat` for a console window or
    `windows\run_dictate_background.vbs` for none. Ticking *Start with Windows*
@@ -101,8 +112,9 @@ soon as the icon is red rather than dark.
 
 ## The model is not in this repository
 
-The weights are not committed here. They are 4.4 GB, they have their own
-license, and GitHub is the wrong place to store them.
+The weights are not committed here. They are 4.4 GB for the speech model and
+3.4 GB for the English fixer, they have their own licenses, and GitHub is the
+wrong place to store them.
 
 `download_model.py` fetches `Qwen/Qwen3-ASR-1.7B` from Hugging Face once and
 caches it at:
@@ -119,8 +131,9 @@ A smaller option is `Qwen/Qwen3-ASR-0.6B` (about 1.2 GB):
 .venv\Scripts\python.exe download_model.py --model Qwen/Qwen3-ASR-0.6B
 ```
 
-Then set `model_id` in `config.json` to the same string. The license for both
-models is Apache-2.0, so commercial and offline use is allowed.
+Then set `model_id` in `config.json` to the same string. The English fixer,
+`Qwen/Qwen3-1.7B`, is fetched the same way with `--model Qwen/Qwen3-1.7B`. The
+license for all three is Apache-2.0, so commercial and offline use is allowed.
 
 If you need to hand someone a folder that works with no download step, copy the
 `models--Qwen--Qwen3-ASR-1.7B` directory into `model-cache\hub\` on that machine
@@ -172,10 +185,14 @@ or digits is dropped as well, which catches the `????` the model sometimes
 emits for noise. If the first pass comes back empty or unreadable, the app
 retries once in the last language it transcribed correctly (English by
 default), because short or accented clips often trip the language detector.
+When `language` is pinned there is no other language to retry in, so the
+retry uses detection instead and is dropped unless it comes back English.
 When nothing can be pasted, the panel says so instead of staying silent.
 
-Latency on this laptop, CPU only: 2 s of speech reaches a paste in about 3 s,
-4 s of speech in about 4.5 s.
+Latency on this laptop with the Arc GPU: transcription takes about 1 s for a
+few seconds of speech, and the English fixer adds about 1 s, so a sentence
+reaches the paste about 2.5 s after you let go. On the CPU-only torch build the
+transcription alone took 5 to 7 s.
 
 ### Choosing your own shortcut
 
@@ -210,13 +227,20 @@ safe; restart to apply.
 |---|---|---|
 | `model_id` | `Qwen/Qwen3-ASR-1.7B` | Model to load. `Qwen/Qwen3-ASR-0.6B` is faster if cached. |
 | `language` | `Auto` | Pin to `English`, `Chinese`, etc. to stop language flipping on short clips. |
+| `accent` | `""` | A sentence about the speaker, sent with the hotwords. Set it for a strong accent. |
 | `trigger_shortcut` | `mouse:x2` | The dictation shortcut: `mouse:x1`, `mouse:x2`, `mouse:middle`, `f8`, `ctrl+alt+j`. |
 | `trigger` | `x2` | Legacy key, kept in sync for the mouse buttons so older builds still read it. |
 | `min_seconds` | `0.5` | Clips shorter than this are discarded. |
 | `max_seconds` | `120.0` | Hard cap on recording length. |
 | `sample_rate` | `16000` | Capture rate. The model expects 16 kHz. |
 | `device` | `null` | `null` means the default mic, or use an input device index. |
+| `torch_device` | `auto` | `auto` uses an Arc (`xpu`), NVIDIA (`cuda`) or Apple (`mps`) GPU when torch sees one, else `cpu`. Falls back to CPU if the GPU load fails. |
 | `cleanup_enabled` | `true` | Runs `text_cleanup.postprocess_text()` before pasting. |
+| `rewrite_enabled` | `true` | Rewrites the transcript into clean English with a local LLM. Tray → Fix my English. |
+| `rewrite_model` | `Qwen/Qwen3-1.7B` | The English-fixer model. Tray → English fixer model. See [the comparison](#model-comparison). |
+| `rewrite_worker_python` | `""` | Python for transformers-5 models such as Gemma 4. Empty = `.venv-t5` next to `dictate.py`. |
+| `second_hearing` | `true` | Transcribes each clip twice in one GPU call (with and without the accent prompt) and gives the fixer both. |
+| `auto_gain` | `true` | Boosts quiet speech (capped at 20x) before transcription. |
 | `trim_silence` | `true` | Trims lead-in and tail silence before transcription. |
 | `suppress_browser_nav` | `true` | Swallows the shortcut system-wide on Windows. `false` uses the pynput fallback, where the shortcut also reaches the app behind. |
 | `keep_recording` | `true` | Keeps `last_recording.wav`. |
@@ -235,6 +259,124 @@ safe; restart to apply.
 `hotwords.txt` holds one term per line, and `#` starts a comment. The terms are
 passed to the model as context, so names, acronyms and jargon come back the way
 you wrote them. The file is re-read when it changes.
+
+`accent` in `config.json` is one sentence describing the speaker and goes into
+that same context, for example *"The speaker has a Singapore and Malaysian
+English accent and imperfect grammar; transcribe their words as spoken and do
+not correct them."* It is the strongest knob for accented speech, because the
+model otherwise tends to tidy the wording up into textbook English.
+
+## Fixing weak English
+
+The speech model writes what it hears: misheard words where pronunciation was
+unclear, and your own grammar. A second, local language model reads the whole
+transcript and rewrites it into the clear English you meant. Both run on the
+GPU and nothing leaves the machine.
+
+| Heard | Pasted |
+|---|---|
+| I already tell him many time but he still never fix the bug. | I've already told him many times, but he still hasn't fixed the bug. |
+| I want to deploy the model on the GP you so the inference more fast. | I want to deploy the model on the GPU so that inference is faster. |
+| …you all please don't late. | Please don't be late. |
+| Write a email to my boss say I am sick today. | Write an email to my boss saying I am sick today. |
+
+What goes into each rewrite:
+
+1. **Two hearings.** Each clip is transcribed twice in one GPU call, with and
+   without the accent prompt (+0.15 s). Where they disagree, you were unclear,
+   and the fixer sees both versions.
+2. **Recent context.** Your last two dictations from the past 3 minutes, so a
+   misheard word can be resolved by topic.
+3. **`corrections.txt`.** Fixed `heard => meant` lines (`data bass => database`)
+   for mistakes that repeat. Applied first and every time. Re-read on change.
+
+**Guardrails.** A rewrite is thrown away and your raw transcript is pasted when
+it is empty, grows past 1.6x or shrinks below 0.5x the words, loses a number,
+adds paragraphs, switches to another script (a translation), keeps under 60%
+of your content words (an answer, a joke, a copied example) or copies the
+earlier dictation. One- and two-word dictations are never rewritten. The log
+keeps `transcribed`, `second hearing` and `fixed English` lines side by side.
+
+### Model comparison
+
+`eval_rewrite.py` runs 28 weak-English sentences through a model and checks the
+text that would actually be pasted (after the guardrails) for the words that
+must and must not be there. Categories: grammar (7), misheard sound-alikes (7),
+second hearing (3), earlier-text context (2), traps that must be fixed rather
+than answered or obeyed (4), sentences to leave alone (2), numbers (3).
+
+Measured 2026-11-16 on the Arc 130V, bf16, greedy decoding, model only (without
+`corrections.txt`). Time is per sentence, after warm-up.
+
+| Model | Params | Score | Avg | p90 | Notes |
+|---|---|---|---|---|---|
+| **google/gemma-4-E2B-it** (tray option) | 2B active (10.2 GB on disk, 4.6 GB on the GPU) | **28/28** | 1.44 s | 1.77 s | Best by a clear margin: fixed "pie tone" → Python from context, "in voice" → invoice, every trap. Runs in `.venv-t5` (see [Two fixers](#two-fixers-swap-in-the-tray)). Load + warm-up 30 s. |
+| **Qwen/Qwen3-1.7B** (default) | 1.7B | **26/28** | 1.02 s | 1.26 s | 27/28 with `corrections.txt`. Misses are unrecovered sound-alikes, never a changed meaning. |
+| Qwen/Qwen2.5-1.5B-Instruct | 1.5B | 26/28 | **0.75 s** | 0.92 s | Best at misheard words (7/7) but rewrites harder: turned "please don't be late" into "Please arrive early". |
+| openbmb/MiniCPM5-2B | 2.0B | 24/28 | 1.33 s | 1.59 s | Translated a "translate this" request. |
+| HuggingFaceTB/SmolLM2-1.7B-Instruct | 1.7B | 24/28 | 1.03 s | 1.24 s | Edits sentences that were already correct ("the laptop" → "my laptop"). |
+| Qwen/Qwen3.5-0.8B | 0.8B | 23/28 | 0.93 s | 1.12 s | Needs transformers 5; the app pins 4.57.6 for qwen-asr. |
+| IFM/K2-Horizon-0.9B | 0.9B | 23/28 | 0.93 s | 1.12 s | Needs transformers 5 and `trust_remote_code`; always reasons (run at its lowest effort). Perfect grammar and traps, but 3/7 misheard: "in voice" → "voice message", "pass word" → "passcode". Changed meaning twice even on passing cases ("call me" → "I will call you"; dropped "Translate this to Chinese"). |
+| LiquidAI/LFM2.5-1.2B-Instruct | 1.2B | 21/28 | 0.66 s | 0.80 s | Fast, but leaves most misheard words (3/7). |
+| Qwen/Qwen3-0.6B | 0.6B | 21/28 | 0.63 s | 0.77 s | Same: 3/7 misheard. |
+| openbmb/MiniCPM5-1B | 1.0B | 17/28 | 0.49 s | 0.63 s | Answers questions instead of fixing them; once pasted a prompt example in place of the speech. |
+| LiquidAI/LFM3-1.7B | 1.7B | 16/28* | 1.92 s | 3.29 s | Needs transformers 5 and `trust_remote_code`. Half its rewrites ran 2-4x too long and were rejected; reasoning leaked into the output with thinking switched off. Its fast conv kernel is CUDA-only, so it falls back to plain PyTorch on Arc. |
+| Qwen/Qwen3-4B-Instruct-2507 | 4.0B | 27/28 | 2.03 s | 2.42 s | Reference above 2B: one more case for twice the time. |
+
+\* LFM3 was scored with an earlier, stricter checker (punctuation-sensitive);
+its failures were mostly guardrail rejections, which the change does not affect.
+Gemma 3 1B and Llama 3.2 1B were not tested: both need a Hugging Face login
+and licence acceptance. LiquidAI/LFM2.5-8B-A1B has 1B
+active parameters but 8B in total (16.9 GB), so it is not a sub-2B model in
+memory.
+
+The prompt and its examples were tuned while testing Qwen models, so the
+comparison favours their habits somewhat. To compare on your own speech, add the
+mistakes you see in `dictate.log` to `CASES` in `eval_rewrite.py`, download a
+model with `download_model.py --model <id>`, and run:
+
+```
+.venv\Scripts\python.exe eval_rewrite.py --model Qwen/Qwen3-1.7B --model <id>
+.venv\Scripts\python.exe eval_rewrite.py --model <id> --corrections   # with corrections.txt
+```
+
+Models needing transformers 5 run with `.venv-t5\Scripts\python.exe eval_rewrite.py`
+instead. To use another model in the app, set `"rewrite_model": "<id>"` in
+`config.json` and restart (add it to `WORKER_MODELS` in `dictate.py` if it needs
+transformers 5).
+
+### Two fixers, swap in the tray
+
+Tray → **English fixer model** → *Qwen3-1.7B (fast, ~1.0 s)* or *Gemma 4 E2B
+(best, ~1.4 s)*. The choice is saved to `config.json` (`rewrite_model`).
+
+- **Qwen3-1.7B** runs inside the app.
+- **Gemma 4 E2B** needs transformers 5, which breaks qwen-asr 0.0.6, so it runs
+  in a second environment, `.venv-t5`, as a background process
+  (`rewrite_worker.py`, log in `rewrite_worker.log`) that the app talks to
+  over a pipe. Same prompt, same guardrails. Set it up once:
+
+  ```
+  py -3.12 -m venv .venv-t5
+  .venv-t5\Scripts\python.exe -m pip install "torch==2.15.0+xpu" --index-url https://download.pytorch.org/whl/xpu --extra-index-url https://pypi.org/simple
+  .venv-t5\Scripts\python.exe -m pip install -r requirements-t5.txt
+  .venv\Scripts\python.exe download_model.py --model google/gemma-4-E2B-it
+  ```
+
+  Gemma 4 is 10.2 GB in bf16, which does not fit next to the speech model in
+  the Arc 130V's shared 16 GB. 4.7 GB of it is a per-layer embedding table
+  (one row lookup per token), so that stays in RAM, and the audio/vision
+  encoders are dropped: 4.6 GB on the GPU, and faster than loading it whole.
+
+Swapping:
+
+- **To Gemma:** Qwen is freed first to make room. For the ~30 s Gemma takes to
+  load, dictations get `corrections.txt` only. The tray shows "loading...".
+- **To Qwen:** Gemma keeps fixing until Qwen is ready (~13 s), then its process
+  is stopped.
+- **If Gemma fails** (no `.venv-t5`, out of memory, the process crashes), the
+  app logs why and loads Qwen3-1.7B instead. It does not retry Gemma until you
+  pick it in the tray again.
 
 ## Platform notes
 
@@ -301,13 +443,33 @@ Only one instance can run. A second copy exits with a message. If you still see
 duplicates, an older copy is running from another folder.
 
 ### It feels slow.
-CPU inference runs at about 1 to 1.5 times realtime. Installing the XPU build of
-torch enables the Arc GPU:
+Run `dictate.py --doctor`. If it says `compute cpu`, torch cannot see a GPU and
+transcription runs at only about 1 to 1.5 times realtime. On an Intel Arc / Core
+Ultra machine, install the XPU build of torch (about 6 to 7 times faster here):
 
 ```
-.venv\Scripts\python.exe -m pip uninstall -y torch
-.venv\Scripts\python.exe -m pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/xpu
+winget install Microsoft.VCRedist.2015+.x64
+.venv\Scripts\python.exe -m pip install "torch==2.15.0+xpu" --index-url https://download.pytorch.org/whl/xpu --extra-index-url https://pypi.org/simple
+.venv\Scripts\python.exe dictate.py --doctor --full
 ```
+
+The VC++ redistributable is required: the CPU torch wheel bundles
+`vcruntime140_1.dll` but the XPU wheel does not, and without it `import torch`
+fails with `WinError 126 ... shm.dll`.
+
+### Quiet or mumbled speech comes out as something else.
+A laptop array mic can record speech very quietly, and the model then fills the
+gaps with its own guesses (it turned "...four. This is me and I'm in Singapore"
+into "...five six seven eight nine ten"). `auto_gain` boosts quiet clips, and the
+log shows `boosted quiet audio x6.4` when it does. Raising the microphone level
+under Settings → System → Sound → Input still helps more than boosting after.
+
+### The English fixer changed my meaning, or missed a word.
+The log keeps both versions: `transcribed ...` is what the speech model heard,
+`second hearing ...` the alternative, `fixed English ...` what was pasted. Add a
+repeat mistake to `corrections.txt`, or add the sentence as a case in
+`eval_rewrite.py` and re-run it before changing models. Tray → Fix my English
+turns the fixer off.
 
 ## Project layout
 
@@ -323,13 +485,19 @@ shortcuts.py               parse, validate, display and match shortcuts
 platform_support.py        per-OS paste chord, clipboard, panel, autostart
 overlay.py                 mini panel: transcript, clipboard, shortcut recorder
 text_cleanup.py            deterministic number/punctuation/filler cleanup
+rewrite.py                 English fixer: prompt, guardrails, corrections
+rewrite_worker.py          runs a transformers-5 fixer (Gemma 4) in .venv-t5
+requirements-t5.txt        packages for .venv-t5
+eval_rewrite.py            scores fixer models on 28 weak-English cases
 test_dictate.py            tests for settings, shortcuts, audio helpers
 test_text_cleanup.py       tests for the cleanup pipeline (63 cases)
+test_rewrite.py            tests for the fixer's guardrails and corrections
 test_mic.py                manual microphone and model diagnostic
 download_model.py          one-time model download (network allowed here)
 landing.html               single-file page, open in any browser
 config.json                created on first run
 hotwords.txt               optional domain words
+corrections.txt            fixed "heard => meant" replacements
 dictate.log                rotating log (1 MB, 3 files)
 MODEL_NOTES.md             model choice, licensing, alternatives
 ```
@@ -354,8 +522,10 @@ linux/run_dictate_background.sh  launcher with no terminal
 trigger.py (shortcut down)  -> start_recording()          [never blocks]
 audio callback (16 kHz)     -> appends frames while recording
 trigger.py (shortcut up)    -> stop_recording_and_process()
-   trim silence -> duration guards -> push to job queue
-worker thread               -> transcribe() -> postprocess_text() -> paste
+   trim silence -> duration guards -> speech gate -> auto gain -> job queue
+worker thread               -> transcribe() (2 hearings, 1 GPU call)
+                            -> postprocess_text() -> corrections.txt
+                            -> rewrite (LLM + guardrails) -> paste
 clipboard watcher (0.6 s)   -> ClipboardHistory.add() -> left-click panel
 ```
 
@@ -366,8 +536,9 @@ is on, and the watcher adds it to the left-click history.
 ## Tests
 
 ```
-.venv\Scripts\python.exe -m unittest -v test_dictate
+.venv\Scripts\python.exe -m unittest -v test_dictate test_rewrite
 .venv\Scripts\python.exe test_text_cleanup.py
+.venv\Scripts\python.exe eval_rewrite.py --model Qwen/Qwen3-1.7B   # needs the model, ~1 min
 .venv\Scripts\python.exe dictate.py --doctor
 .venv\Scripts\python.exe dictate.py --doctor --full
 ```

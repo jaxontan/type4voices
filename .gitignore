@@ -2,11 +2,13 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-t5/
 venv/
 
 # Runtime artifacts
 dictate.log
 dictate.log.*
+rewrite_worker.log
 last_recording.wav
 test_mic.wav
 config.json
