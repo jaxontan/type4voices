@@ -17,7 +17,13 @@ if [ -z "$PYTHON" ]; then
 fi
 
 if [ -z "$PYTHON" ]; then
-    echo "Python 3.10+ was not found. Install it, then run this script again."
+    echo "============================================================"
+    echo "Python 3.10+ was not found on your system."
+    echo "Install Python 3.12 via Homebrew:"
+    echo "  brew install python@3.12 python-tk@3.12"
+    echo "Or download the official macOS installer from:"
+    echo "  https://www.python.org/downloads/macos/"
+    echo "============================================================"
     exit 1
 fi
 

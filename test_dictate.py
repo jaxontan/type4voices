@@ -407,6 +407,19 @@ class PlatformTests(unittest.TestCase):
     def test_autostart_command_mentions_the_script(self):
         self.assertIn("dictate.py", platform_support.autostart_command()[-1])
 
+    def test_system_hardware_report_returns_expected_keys(self):
+        hw = platform_support.system_hardware_report()
+        self.assertIsInstance(hw, dict)
+        for key in ("os", "cpu", "cores", "ram_total_gb", "disk_free_gb", "gpus", "npus"):
+            self.assertIn(key, hw)
+        self.assertIsInstance(hw["gpus"], list)
+        self.assertIsInstance(hw["npus"], list)
+        self.assertGreater(hw["cores"], 0)
+
+    def test_promote_tray_icon_returns_bool(self):
+        result = platform_support.promote_tray_icon()
+        self.assertIsInstance(result, bool)
+
 
 class AppShortcutTests(unittest.TestCase):
     """The app applies a shortcut without restarting."""

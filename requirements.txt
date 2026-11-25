@@ -7,7 +7,8 @@
 #
 # torch: the default PyPI wheel is CPU-only. For an Intel Arc / Core Ultra GPU
 # install the XPU build instead, e.g.
-#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/xpu
+#   pip install "torch==2.15.0+xpu" --index-url https://download.pytorch.org/whl/xpu --extra-index-url https://pypi.org/simple
+# Using a range allows the +xpu build to satisfy the requirement without being downgraded.
 numpy==2.5.4
 sounddevice==0.5.6
 soundfile==0.14.0
@@ -15,7 +16,7 @@ pillow==12.3.0
 pynput==1.8.2
 pyperclip==1.11.0
 pystray==0.19.5
-torch==2.15.0
+torch>=2.15.0,<2.16
 transformers==4.57.6
 qwen-asr==0.0.6
 huggingface_hub==0.36.2

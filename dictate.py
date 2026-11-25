@@ -40,6 +40,7 @@ import soundfile as sf
 from PIL import Image, ImageDraw
 from pynput import keyboard, mouse
 
+import context_awareness
 import platform_support
 import shortcuts
 import rewrite
@@ -121,6 +122,15 @@ DEFAULTS: dict[str, Any] = {
     # Python for models that need transformers 5 (see WORKER_MODELS).
     # Empty = .venv-t5 next to this script.
     "rewrite_worker_python": "",
+    # Optional OpenAI-compatible server for the English fixer (e.g. local
+    # llama-server Vulkan/Metal/CUDA GGUF, Ollama http://127.0.0.1:11434/v1,
+    # or a LAN GPU server). When unreachable, falls back to the local model.
+    "rewrite_api_base": "",
+    "rewrite_api_key": "",
+    "rewrite_api_model": "",
+    # Inspect the focused window title/app (<1 ms, local-only) to extract
+    # on-screen technical terms as dynamic hotwords and adapt style per app.
+    "context_awareness": True,
     "trim_silence": True,             # trim lead-in/tail silence before ASR
     "auto_gain": True,                # boost quiet speech before ASR
     "suppress_browser_nav": True,     # swallow the shortcut system-wide (Windows)
@@ -890,6 +900,11 @@ class DictationTray:
                 self._toggle_rewrite,
                 checked=lambda _item: bool(self.app.settings.rewrite_enabled),
             ),
+            pystray.MenuItem(
+                "App context awareness",
+                self._toggle_context_awareness,
+                checked=lambda _item: bool(getattr(self.app.settings, "context_awareness", True)),
+            ),
             pystray.MenuItem("English fixer model", pystray.Menu(*self._rewrite_model_items())),
             pystray.MenuItem(
                 "Transcript panel",
@@ -959,6 +974,14 @@ class DictationTray:
             )
             self._icon.run_detached()
             log.info("tray icon started")
+            if platform_support.IS_WINDOWS:
+                def _auto_promote():
+                    try:
+                        time.sleep(1.5)
+                        platform_support.promote_tray_icon()
+                    except Exception:
+                        pass
+                threading.Thread(target=_auto_promote, daemon=True, name="promote-tray").start()
         except Exception:
             log.exception("could not initialise the system tray icon")
             self._icon = None
@@ -990,6 +1013,11 @@ class DictationTray:
 
     def _toggle_rewrite(self, icon=None, item=None):
         self.app.set_rewrite(not bool(self.app.settings.rewrite_enabled))
+
+    def _toggle_context_awareness(self, icon=None, item=None):
+        self.app.set_context_awareness(
+            not bool(getattr(self.app.settings, "context_awareness", True))
+        )
 
     def _rewrite_model_items(self) -> list:
         import pystray
@@ -1110,6 +1138,7 @@ class VoiceDictationApp:
         self._rewriter_loading: str | None = None  # model id being loaded
         self._rewriter_failed: set[str] = set()     # not retried until re-chosen
         self._last_alternative = ""
+        self._current_context = context_awareness.AppContext()
         # (time, text) of recent pastes: topic context for the English fixer.
         self._recent: list[tuple[float, str]] = []
         self._corrections_cache: tuple[float | None, list] = (None, [])
@@ -1439,6 +1468,12 @@ class VoiceDictationApp:
             self._ensure_rewriter()
         self._refresh_menu()
 
+    def set_context_awareness(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        self.settings.set("context_awareness", enabled)
+        log.info("app context awareness %s", "enabled" if enabled else "disabled")
+        self._refresh_menu()
+
     def set_rewrite_model(self, model_id: str) -> None:
         """Swap the English fixer. The current one keeps working until the new
         one is loaded, then it is freed."""
@@ -1472,6 +1507,12 @@ class VoiceDictationApp:
             )
         return rewrite.Rewriter(model_id, device)
 
+    def _make_api_rewriter(self, model_id: str) -> "rewrite.OpenAIRewriter":
+        api_base = str(getattr(self.settings, "rewrite_api_base", "") or "").strip()
+        api_model = str(getattr(self.settings, "rewrite_api_model", "") or "").strip() or model_id
+        api_key = str(getattr(self.settings, "rewrite_api_key", "") or "").strip()
+        return rewrite.OpenAIRewriter(api_model, api_base, api_key)
+
     def _ensure_rewriter(self) -> None:
         """Start loading the chosen fixer in the background if it isn't the
         active one yet. Never blocks: Gemma 4 takes ~2 minutes to load."""
@@ -1496,8 +1537,14 @@ class VoiceDictationApp:
             self._refresh_menu()  # drop the "loading..." label
 
     def _do_switch_rewriter(self, wanted: str, fallback: bool = False) -> None:
-        log.info("loading English fixer %s%s", wanted, " (fallback)" if fallback else "")
-        if wanted in WORKER_MODELS:
+        api_base = str(getattr(self.settings, "rewrite_api_base", "") or "").strip()
+        using_api = bool(api_base) and not fallback
+        log.info(
+            "loading English fixer %s%s",
+            wanted,
+            " (fallback)" if fallback else (" (API)" if using_api else ""),
+        )
+        if not using_api and wanted in WORKER_MODELS:
             # Gemma 4 needs ~10 GB; with the speech model that fills the Arc's
             # shared 16 GB, so the current fixer must go first. Dictations in
             # the meantime get corrections.txt only.
@@ -1506,7 +1553,7 @@ class VoiceDictationApp:
             if old is not None:
                 log.info("freeing %s to make room", old.model_id)
                 old.close()
-        new = self._make_rewriter(wanted)
+        new = self._make_api_rewriter(wanted) if using_api else self._make_rewriter(wanted)
         ok = new.load()
         old = None
         with self._rewriter_lock:
@@ -1519,14 +1566,18 @@ class VoiceDictationApp:
             new.close()  # the user picked something else while it loaded
             return
         if ok:
-            log.info("English fixer now %s", wanted)
+            log.info("English fixer now %s", new.model_id)
             if old is not None and old is not new:
                 old.close()
             return
         log.warning("English fixer %s failed: %s", wanted, new.error)
         self._rewriter_failed.add(wanted)
         current = self._rewriter
-        if wanted != rewrite.DEFAULT_MODEL and (current is None or not current.ready):
+        if using_api and (current is None or not current.ready):
+            # API endpoint unreachable (e.g. off LAN or llama-server stopped):
+            # fall back to the local model cleanly.
+            self._do_switch_rewriter(wanted, fallback=True)
+        elif wanted != rewrite.DEFAULT_MODEL and (current is None or not current.ready):
             self._do_switch_rewriter(rewrite.DEFAULT_MODEL, fallback=True)
 
     def _active_rewriter(self) -> "rewrite.Rewriter | None":
@@ -1584,7 +1635,12 @@ class VoiceDictationApp:
         self._recent.append((time.time() if now is None else now, text))
         self._recent = self._recent[-2:]
 
-    def maybe_rewrite(self, text: str, alternative: str = "") -> str:
+    def maybe_rewrite(
+        self,
+        text: str,
+        alternative: str = "",
+        app_context: context_awareness.AppContext | None = None,
+    ) -> str:
         if not text or not self.settings.rewrite_enabled:
             return text
         rewriter = self._active_rewriter()
@@ -1594,12 +1650,18 @@ class VoiceDictationApp:
         corrections = self._corrections()
         if alternative and corrections:
             alternative = rewrite.apply_corrections(alternative, corrections)
+        terms = self._hotword_terms()
+        style_hint = ""
+        if app_context is not None and not app_context.sensitive:
+            terms = context_awareness.merge_hotwords(terms, app_context.dynamic_terms)
+            style_hint = context_awareness.style_hint_for_category(app_context.category)
         return rewriter.rewrite(
             text,
             accent=str(getattr(self.settings, "accent", "") or ""),
-            terms=self._hotword_terms(),
+            terms=terms,
             alternative=alternative,
             recent=self.recent_context(),
+            style_hint=style_hint,
         )
 
     def set_cleanup(self, enabled: bool) -> None:
@@ -1737,20 +1799,22 @@ class VoiceDictationApp:
             log.warning("language %r unsupported by this model; using auto", name)
         return resolved
 
-    def _context(self) -> str:
+    def _context(self, extra_terms: tuple[str, ...] | list[str] = ()) -> str:
         accent = str(getattr(self.settings, "accent", "") or "").strip()
         terms: list[str] = []
         mtime: float | None = None
+        extra_key = tuple(extra_terms)
 
         if self.settings.use_hotwords:
             try:
                 mtime = os.path.getmtime(HOTWORDS_PATH)
             except OSError:
                 mtime = None
-            if mtime is not None:
+            if mtime is not None and not extra_key:
                 cached_key, cached_context = self._hotword_cache
                 if cached_key == (mtime, accent):
                     return cached_context
+            if mtime is not None:
                 try:
                     with open(HOTWORDS_PATH, "r", encoding="utf-8") as handle:
                         terms = parse_hotwords(handle.read())
@@ -1758,20 +1822,31 @@ class VoiceDictationApp:
                     log.warning("could not read hotwords: %s", exc)
                     terms = []
 
+        if extra_key:
+            terms = context_awareness.merge_hotwords(terms, extra_key)
         context = compose_context(terms, accent)
-        if mtime is not None:
+        if mtime is not None and not extra_key:
             self._hotword_cache = ((mtime, accent), context)
         if terms:
             log.debug("hotwords in use: %s", ", ".join(terms))
         return context
 
-    def transcribe(self, audio: np.ndarray) -> str:
+    def transcribe(
+        self,
+        audio: np.ndarray,
+        app_context: context_awareness.AppContext | None = None,
+    ) -> str:
         model = self.load_model()
         if model is None:
             return ""
         sample_rate = int(self.settings.sample_rate)
         language = self._effective_language(model)
-        text, detected = self._run_asr(model, audio, sample_rate, language)
+        extra_terms = (
+            app_context.dynamic_terms
+            if app_context is not None and not app_context.sensitive
+            else ()
+        )
+        text, detected = self._run_asr(model, audio, sample_rate, language, extra_terms)
 
         if not is_pasteable(text):
             # Accented or clipped speech often comes back empty, as symbols or
@@ -1801,7 +1876,7 @@ class VoiceDictationApp:
                     detected or "language-detected",
                 )
                 retry, detected_retry = self._run_asr(
-                    model, audio, sample_rate, fallback
+                    model, audio, sample_rate, fallback, extra_terms
                 )
                 if is_pasteable(retry) and (
                     not allow_auto or looks_like_english(detected_retry)
@@ -1814,12 +1889,22 @@ class VoiceDictationApp:
                 log.info("detected language: %s", detected)
         return text
 
-    def _run_asr(self, model, audio: np.ndarray, sample_rate: int, language):
-        context = self._context()
+    def _run_asr(
+        self,
+        model,
+        audio: np.ndarray,
+        sample_rate: int,
+        language,
+        extra_terms: tuple[str, ...] | list[str] = (),
+    ):
+        context = self._context(extra_terms)
         # Second hearing: the same audio again with only the hotwords as
         # prompt, batched into the same GPU call (+~0.15s). Where the two
         # disagree the speaker was unclear, which the English fixer uses.
-        plain = compose_context(self._hotword_terms() if self.settings.use_hotwords else [])
+        plain_terms = self._hotword_terms() if self.settings.use_hotwords else []
+        if extra_terms:
+            plain_terms = context_awareness.merge_hotwords(plain_terms, extra_terms)
+        plain = compose_context(plain_terms)
         second = bool(getattr(self.settings, "second_hearing", True)) and plain != context
         if second:
             results = model.transcribe(
@@ -1958,10 +2043,22 @@ class VoiceDictationApp:
             self._frames = []
             self._recording = True
             self._record_started_at = time.time()
+            if getattr(self.settings, "context_awareness", True):
+                self._current_context = context_awareness.capture_active_context()
+            else:
+                self._current_context = context_awareness.AppContext()
         # Never block the mouse hook: if the mic is not open yet, open it on a
         # worker thread and start collecting as soon as frames arrive.
         if self._stream is None:
             self._open_stream_in_background()
+        if self._current_context.active:
+            log.debug(
+                "active context: app=%s category=%s sensitive=%s terms=%s",
+                self._current_context.process_name,
+                self._current_context.category,
+                self._current_context.sensitive,
+                ", ".join(self._current_context.dynamic_terms),
+            )
         log.info("recording started")
         self.refresh_state()
 
@@ -1971,6 +2068,8 @@ class VoiceDictationApp:
                 return
             self._recording = False
             frames, self._frames = self._frames, []
+            app_context = self._current_context
+            self._current_context = context_awareness.AppContext()
         self._record_started_at = 0.0
 
         if not frames:
@@ -2031,7 +2130,7 @@ class VoiceDictationApp:
                 log.info("boosted quiet audio x%.1f", gain)
 
         log.info("queued %s of audio for transcription", format_duration(seconds))
-        self._job_queue.put((audio, seconds))
+        self._job_queue.put((audio, seconds, app_context))
 
     def _transcription_worker(self) -> None:
         """Serialize inference so rapid dictations cannot overlap."""
@@ -2044,7 +2143,11 @@ class VoiceDictationApp:
                 self._job_queue.task_done()
                 continue
 
-            audio, seconds = item
+            if len(item) == 3:
+                audio, seconds, app_context = item
+            else:
+                audio, seconds = item
+                app_context = context_awareness.AppContext()
             try:
                 self.refresh_state(busy=True)
                 if self.settings.keep_recording:
@@ -2059,7 +2162,7 @@ class VoiceDictationApp:
                 if self._model is None and self.model_error is None:
                     self.load_model()
                 started = time.time()
-                raw_text = normalize_transcript(self.transcribe(audio))
+                raw_text = normalize_transcript(self.transcribe(audio, app_context))
                 text = postprocess_text(raw_text) if self.cleanup_enabled else raw_text
                 elapsed = time.time() - started
 
@@ -2074,7 +2177,9 @@ class VoiceDictationApp:
                     text = self.apply_corrections(text)
                     if self.settings.rewrite_enabled:
                         heard = text
-                        text = normalize_transcript(self.maybe_rewrite(heard, alternative))
+                        text = normalize_transcript(
+                            self.maybe_rewrite(heard, alternative, app_context)
+                        )
                         if text != heard:
                             log.info("fixed English: %r", text)
                     self.remember(text)
@@ -2282,6 +2387,25 @@ def run_doctor(settings: Settings, full: bool = False) -> int:
     print(f"python      : {sys.version.split()[0]} ({sys.executable})")
     print(f"config      : {settings.path}")
     print(f"platform    : {platform_support.SYSTEM}")
+    try:
+        hw = platform_support.system_hardware_report()
+        if hw.get("cpu"):
+            print(f"cpu         : {hw['cpu']} ({hw['cores']} cores)")
+        if hw.get("ram_total_gb") is not None:
+            free_s = f", {hw['ram_free_gb']} GB free" if hw.get("ram_free_gb") is not None else ""
+            print(f"memory      : {hw['ram_total_gb']} GB total{free_s}")
+        if hw.get("disk_free_gb") is not None:
+            print(f"disk space  : {hw['disk_free_gb']} GB free")
+        if hw.get("gpus"):
+            for g in hw["gpus"]:
+                print(f"gpu         : {g}")
+        if hw.get("npus"):
+            for n in hw["npus"]:
+                print(f"npu         : {n}")
+        if platform_support.IS_WINDOWS and hw.get("vc_redist") is not None:
+            print(f"  {'ok ' if hw['vc_redist'] else 'warn'} vc_redist     {'installed' if hw['vc_redist'] else 'not found (needed for torch XPU)'}")
+    except Exception:
+        pass
     print(f"shortcut    : {shortcuts.describe(settings.trigger_shortcut)}")
     print(f"clipboard   : {platform_support.clipboard_backend_name()}")
     for status, text in platform_support.permission_report():

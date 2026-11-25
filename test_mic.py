@@ -60,9 +60,13 @@ else:
 sf.write(OUTPUT_WAV, audio, SAMPLE_RATE)
 print(f"Saved audio to: {OUTPUT_WAV}")
 
-print("\nLoading Qwen3-ASR model for verification...")
+import torch
+
+device = "xpu" if hasattr(torch, "xpu") and torch.xpu.is_available() else "cpu"
+print(f"\nLoading Qwen3-ASR model on {device} for verification...")
 t0 = time.time()
-model = Qwen3ASRModel.from_pretrained("Qwen/Qwen3-ASR-1.7B")
+load_kwargs = {"device_map": device, "dtype": torch.bfloat16} if device != "cpu" else {}
+model = Qwen3ASRModel.from_pretrained("Qwen/Qwen3-ASR-1.7B", **load_kwargs)
 print(f"Model ready ({time.time() - t0:.2f}s). Transcribing...")
 
 t0 = time.time()

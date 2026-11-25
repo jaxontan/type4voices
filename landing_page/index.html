@@ -1,0 +1,1287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#faf9f6">
+<title>type4voices: speak the way you speak</title>
+<meta name="description" content="Local voice typing for Windows, macOS and Linux. Hold a button, talk, let go. Speech is transcribed on your machine, and a small local model rewrites weak or misheard English into what you meant. Offline, no account.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='5' fill='%2322252a'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23ef4136'/%3E%3Ccircle cx='8' cy='16' r='3' fill='%2322c55e'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* ============================================================ tokens */
+
+  :root {
+    color-scheme: light;
+
+    --bg: #faf9f6;
+    --bg-2: #f3f1ec;
+    --card: #ffffff;
+    --card-2: #f6f4ef;
+    --line: #e8e4dc;
+    --line-2: #d8d3c8;
+    --ink: #121316;
+    --ink-2: #4c5159;
+    --ink-3: #80858d;
+
+    /* green = what gets typed, red = what was heard */
+    --green: #128a43;
+    --green-lamp: #22c55e;
+    --green-ink: #0b6b33;
+    --green-wash: #dcf4e4;
+    --green-soft: #eef9f2;
+    --red: #d6362b;
+    --red-lamp: #ef4136;
+    --red-ink: #b02a20;
+    --red-wash: #fde3df;
+    --red-soft: #fef2f0;
+    --amber: #e9a23b;
+
+    /* dark objects: the app's panel, terminals */
+    --obj: #17191d;
+    --obj-2: #1f2228;
+    --obj-line: #31353d;
+    --obj-ink: #eef0f3;
+    --obj-mute: #9aa1ab;
+
+    --sh-1: 0 1px 2px rgba(18, 19, 22, .04), 0 2px 8px -2px rgba(18, 19, 22, .06);
+    --sh-2: 0 1px 2px rgba(18, 19, 22, .05), 0 24px 48px -20px rgba(18, 19, 22, .22);
+    --sh-3: 0 2px 4px rgba(18, 19, 22, .04), 0 40px 80px -30px rgba(18, 19, 22, .35);
+
+    --display: "Inter Tight", "Inter", system-ui, sans-serif;
+    --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --serif: "Instrument Serif", Georgia, serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Consolas, monospace;
+
+    --max: 1160px;
+    --r: 18px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 var(--sans);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3 { margin: 0; text-wrap: balance; font-family: var(--display); }
+  p { margin: 0; }
+  a { color: inherit; }
+  button { font: inherit; color: inherit; }
+  ::selection { background: var(--green-wash); color: var(--green-ink); }
+  :focus-visible { outline: 2px solid var(--green); outline-offset: 3px; border-radius: 4px; }
+  main [id] { scroll-margin-top: 80px; }
+
+  @media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
+  .wrap { width: 100%; max-width: var(--max); margin: 0 auto; padding: 0 16px; }
+
+  .skip { position: absolute; left: -9999px; top: 8px; z-index: 99; padding: 10px 14px; background: var(--ink); color: #fff; }
+  .skip:focus { left: 8px; }
+
+  code, kbd { font-family: var(--mono); }
+
+  code {
+    padding: 1px 5px;
+    background: var(--card-2);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    font-size: .84em;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font: 500 11px/1 var(--mono);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+
+  .eyebrow::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--green-lamp);
+    box-shadow: 0 0 0 3px var(--green-wash);
+  }
+
+  .eyebrow.red::before { background: var(--red-lamp); box-shadow: 0 0 0 3px var(--red-wash); }
+
+  .serif { font-family: var(--serif); font-style: italic; font-weight: 400; letter-spacing: -.01em; }
+  .g { color: var(--green); }
+  .rd { color: var(--red); }
+
+  /* ============================================================ nav */
+
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: rgba(250, 249, 246, .78);
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    border-bottom: 1px solid transparent;
+    transition: border-color .2s;
+  }
+
+  .nav.scrolled { border-bottom-color: var(--line); }
+  .nav .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 62px; }
+
+  .brand { display: inline-flex; align-items: center; gap: 10px; font: 600 15.5px/1 var(--display); letter-spacing: -.01em; text-decoration: none; }
+
+  .links { display: flex; align-items: center; gap: 24px; }
+  .links a { font-size: 14px; color: var(--ink-2); text-decoration: none; }
+  .links a:hover { color: var(--ink); }
+  .links .opt { display: none; }
+
+  .pill-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 15px;
+    background: var(--ink);
+    color: #fff !important;
+    border-radius: 999px;
+    font: 600 13px/1 var(--sans);
+    text-decoration: none;
+  }
+
+  .pill-btn:hover { background: #2a2c31; }
+
+  /* tray traffic light */
+  .tl { display: inline-flex; flex: none; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 16px; height: 26px; background: #22252a; border: 1px solid #000; border-radius: 5px; }
+  .tl i { width: 9px; height: 9px; border-radius: 50%; background: #3a3f46; }
+  .tl i.r { background: var(--red-lamp); box-shadow: 0 0 7px rgba(239, 65, 54, .7); }
+  .tl i.gl { background: var(--green-lamp); box-shadow: 0 0 7px rgba(34, 197, 94, .7); }
+  .tl i.off.r { background: #4a1714; box-shadow: none; }
+  .tl i.off.gl { background: #12401f; box-shadow: none; }
+
+  /* ============================================================ hero */
+
+  .hero { position: relative; padding: 44px 0 40px; isolation: isolate; }
+
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -62px 0 auto;
+    height: 760px;
+    z-index: -1;
+    background:
+      radial-gradient(520px 360px at 82% 34%, rgba(34, 197, 94, .16), transparent 70%),
+      radial-gradient(460px 320px at 6% 4%, rgba(239, 65, 54, .10), transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero::after {
+    content: "";
+    position: absolute;
+    inset: -62px 0 0;
+    z-index: -1;
+    background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 15%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 15%, transparent 75%);
+    opacity: .7;
+    pointer-events: none;
+  }
+
+  .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: center; }
+
+  h1 {
+    margin: 20px 0 20px;
+    font-size: clamp(2.6rem, 11vw, 5rem);
+    font-weight: 600;
+    line-height: .98;
+    letter-spacing: -.045em;
+  }
+
+  h1 .serif { display: block; color: var(--green); font-size: 1.08em; letter-spacing: -.02em; line-height: 1.02; }
+
+  h1 .wavy {
+    text-decoration: underline wavy var(--red-lamp);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 9px;
+    text-decoration-skip-ink: none;
+  }
+
+  .lead { max-width: 33rem; font-size: 17.5px; line-height: 1.6; color: var(--ink-2); }
+  .lead b { color: var(--ink); font-weight: 600; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 14px 22px;
+    border-radius: 999px;
+    font: 600 14.5px/1 var(--sans);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: transform .15s, background .15s, border-color .15s, box-shadow .15s;
+  }
+
+  .btn:active { transform: translateY(1px); }
+
+  .btn.primary {
+    background: var(--green);
+    color: #fff;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, .25) inset, 0 10px 24px -10px rgba(18, 138, 67, .7);
+  }
+
+  .btn.primary:hover { background: var(--green-ink); }
+  .btn.ghost { background: var(--card); border: 1px solid var(--line-2); color: var(--ink); box-shadow: var(--sh-1); }
+  .btn.ghost:hover { border-color: var(--ink-3); }
+
+  .proof { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 26px; font: 12px/1.4 var(--mono); color: var(--ink-3); }
+  .proof span { display: inline-flex; align-items: center; gap: 7px; }
+  .proof svg { color: var(--green); }
+
+  /* ---------- interactive demo */
+
+  .demo { position: relative; min-width: 0; }
+
+  .win {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--line-2);
+    border-radius: 18px;
+    box-shadow: var(--sh-3);
+  }
+
+  .win-bar { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 17px 17px 0 0; background: var(--card-2); border-bottom: 1px solid var(--line); font: 12px/1 var(--mono); color: var(--ink-3); }
+  .win-bar .dots { display: flex; gap: 6px; }
+  .win-bar .dots i { width: 10px; height: 10px; border-radius: 50%; background: #dcd7cd; }
+  .win-bar .dots i:first-child { background: #f08a80; }
+  .win-bar .dots i:nth-child(2) { background: #f2c66b; }
+  .win-bar .dots i:last-child { background: #7fd39b; }
+  .win-bar b { font-weight: 500; color: var(--ink); }
+
+  .chat { display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; height: 240px; padding: 16px 16px 6px; overflow: hidden; }
+
+  .msg { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 10px; animation: rise .35s ease-out both; }
+  .av { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; font: 600 13px/1 var(--display); color: #fff; }
+  .msg .who { font: 600 13.5px/1.2 var(--display); }
+  .msg .who small { margin-left: 6px; font: 400 11px var(--mono); color: var(--ink-3); }
+  .msg p { margin-top: 3px; font-size: 14.5px; line-height: 1.5; color: var(--ink-2); }
+  .msg.me p { color: var(--ink); }
+
+  .composer {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    margin: 8px 12px 46px;
+    padding: 10px 14px;
+    background: var(--card);
+    border: 1.5px solid var(--line-2);
+    border-radius: 12px;
+    font-size: 14.5px;
+    line-height: 1.45;
+    color: var(--ink);
+    transition: border-color .2s, box-shadow .2s;
+  }
+
+  .composer.active { border-color: var(--green); box-shadow: 0 0 0 4px var(--green-soft); }
+  .composer .ph { color: var(--ink-3); }
+  .caret { display: inline-block; width: 2px; height: 18px; margin-left: 1px; vertical-align: -3px; background: var(--green); animation: blink 1.05s steps(1) infinite; }
+
+  /* the floating dictation panel (dark, like the real app) */
+  .hud {
+    position: absolute;
+    left: 50%;
+    bottom: -24px;
+    z-index: 2;
+    width: min(92%, 410px);
+    padding: 11px 13px;
+    background: rgba(23, 25, 29, .96);
+    border: 1px solid var(--obj-line);
+    border-radius: 14px;
+    box-shadow: 0 24px 50px -16px rgba(18, 19, 22, .55);
+    transform: translateX(-50%);
+    font: 12px/1.45 var(--mono);
+    color: var(--obj-ink);
+    transition: border-color .25s;
+  }
+
+  .hud[data-state="rec"] { border-color: rgba(34, 197, 94, .7); }
+  .hud-top { display: flex; align-items: center; gap: 10px; min-height: 22px; }
+  .hud-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--red-lamp); box-shadow: 0 0 8px var(--red-lamp); }
+  .hud[data-state="rec"] .hud-dot,
+  .hud[data-state="asr"] .hud-dot,
+  .hud[data-state="fix"] .hud-dot { background: var(--green-lamp); box-shadow: 0 0 10px var(--green-lamp); }
+  .hud[data-state="rec"] .hud-dot { animation: pulse 1s ease-in-out infinite; }
+  .hud-label { white-space: nowrap; }
+  .hud-time { margin-left: auto; color: var(--obj-mute); }
+
+  .wave { display: flex; align-items: center; gap: 2px; height: 22px; flex: 1; min-width: 0; overflow: hidden; }
+  .wave i { flex: 1; min-width: 2px; max-width: 4px; height: 3px; border-radius: 2px; background: var(--green-lamp); opacity: .3; transition: height .08s linear, opacity .2s; }
+  .hud[data-state="rec"] .wave i { opacity: 1; }
+
+  .hud-text { display: none; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--obj-line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hud[data-state="fix"] .hud-text,
+  .hud[data-state="done"] .hud-text { display: block; }
+  .hud[data-state="fix"] .hud-text { color: #ff9c94; text-decoration: line-through; text-decoration-color: rgba(239, 65, 54, .8); }
+  .hud[data-state="done"] .hud-text { color: #9cf0ba; }
+
+  .spin { width: 12px; height: 12px; border: 2px solid var(--obj-line); border-top-color: var(--green-lamp); border-radius: 50%; animation: spin .7s linear infinite; display: none; }
+  .hud[data-state="asr"] .spin, .hud[data-state="fix"] .spin { display: inline-block; }
+  .hud[data-state="asr"] .wave, .hud[data-state="fix"] .wave, .hud[data-state="done"] .wave { display: none; }
+
+  .try { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px; margin-top: 46px; }
+
+  .hold {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px 12px 13px;
+    background: var(--card);
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    box-shadow: var(--sh-1);
+    font: 600 14px/1 var(--sans);
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    transition: border-color .15s, background .15s, transform .1s;
+  }
+
+  .hold:hover { border-color: var(--green); }
+  .hold.down { background: var(--green-soft); border-color: var(--green); transform: scale(.98); }
+  .hold .mic { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--red-lamp); color: #fff; transition: background .2s; }
+  .hold.down .mic { background: var(--green-lamp); animation: pulse 1s ease-in-out infinite; }
+  .try-note { font: 12px/1.4 var(--mono); color: var(--ink-3); }
+
+  /* ============================================================ apps strip */
+
+  .apps { padding: 60px 0 8px; text-align: center; }
+  .apps p { font: 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+
+  .marquee { position: relative; margin-top: 22px; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+  .track-m { display: flex; gap: 44px; width: max-content; animation: slide 40s linear infinite; }
+  .track-m span { font: 600 clamp(18px, 3vw, 25px)/1 var(--display); letter-spacing: -.02em; color: #bdb7ab; white-space: nowrap; }
+  .track-m span:nth-child(3n+2) { font-family: var(--serif); font-style: italic; font-weight: 400; }
+
+  /* ============================================================ sections */
+
+  .sec { padding: 96px 0 0; }
+  .sec-head { max-width: 46rem; margin-bottom: 40px; }
+  .sec-head h2 { margin: 16px 0 14px; font-size: clamp(2rem, 6vw, 3.3rem); font-weight: 600; line-height: 1.04; letter-spacing: -.04em; }
+  .sec-head h2 .serif { color: var(--green); }
+  .sec-head p { font-size: 17px; color: var(--ink-2); }
+
+  /* ---------- fixer with toggle */
+
+  .fx { background: var(--card); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--sh-2); overflow: hidden; }
+
+  .fx-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; background: var(--card-2); border-bottom: 1px solid var(--line); }
+  .fx-bar .state { display: inline-flex; align-items: center; gap: 8px; font: 12px/1.4 var(--mono); color: var(--ink-3); }
+  .fx-bar .state b { font-weight: 500; color: var(--green); }
+  .fx[data-on="false"] .fx-bar .state b { color: var(--red); }
+
+  .switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 6px 6px 14px;
+    background: var(--card);
+    border: 1px solid var(--line-2);
+    border-radius: 999px;
+    box-shadow: var(--sh-1);
+    font: 600 13px/1 var(--sans);
+    cursor: pointer;
+  }
+
+  .switch .knob { position: relative; width: 46px; height: 26px; border-radius: 999px; background: var(--red-lamp); transition: background .2s; }
+  .switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .2s; }
+  .switch[aria-checked="true"] .knob { background: var(--green-lamp); }
+  .switch[aria-checked="true"] .knob::after { transform: translateX(20px); }
+
+  .fxrow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 22px 18px; border-top: 1px solid var(--line); }
+  .fxrow:first-of-type { border-top: 0; }
+
+  .fxtag { align-self: start; justify-self: start; padding: 4px 9px; border-radius: 999px; background: var(--card-2); border: 1px solid var(--line); font: 500 10.5px/1.3 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+
+  .fxtext { display: grid; }
+  .fxtext p { grid-area: 1 / 1; font: 500 clamp(18px, 2.6vw, 25px)/1.45 var(--display); letter-spacing: -.015em; transition: opacity .3s, transform .3s, filter .3s; }
+  .fxtext .h { color: var(--ink-2); }
+  .fxtext .h u { text-decoration: underline wavy var(--red-lamp); text-decoration-thickness: 1.5px; text-underline-offset: 6px; text-decoration-skip-ink: none; color: var(--red-ink); }
+  .fxtext .p mark { background: var(--green-wash); color: var(--green-ink); border-radius: 6px; padding: 0 4px; }
+
+  .fx[data-on="true"] .fxtext .h,
+  .fx[data-on="false"] .fxtext .p { opacity: 0; transform: translateY(6px); filter: blur(3px); pointer-events: none; }
+
+  /* ---------- bento */
+
+  .bento { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+
+  .tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-width: 0;
+    padding: 24px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    box-shadow: var(--sh-1);
+    overflow: hidden;
+  }
+
+  .tile h3 { font-size: 20px; font-weight: 600; letter-spacing: -.02em; line-height: 1.25; }
+  .tile p { font-size: 14.5px; line-height: 1.6; color: var(--ink-2); }
+  .tile .k { font: 500 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  .tile .vis { margin-top: auto; }
+
+  .tile.tint-g { background: linear-gradient(160deg, var(--green-soft), var(--card) 60%); }
+  .tile.tint-r { background: linear-gradient(160deg, var(--red-soft), var(--card) 60%); }
+
+  .mono-box {
+    padding: 13px 15px;
+    background: var(--card-2);
+    border: 1px solid var(--line);
+    border-radius: 11px;
+    font: 12.5px/1.8 var(--mono);
+    color: var(--ink-2);
+    overflow-x: auto;
+  }
+
+  .mono-box .dim { color: var(--ink-3); }
+  .mono-box .bad { color: var(--red-ink); background: var(--red-wash); border-radius: 4px; padding: 0 3px; }
+  .mono-box .good { color: var(--green-ink); background: var(--green-wash); border-radius: 4px; padding: 0 3px; }
+
+  .rules { display: flex; flex-wrap: wrap; gap: 7px; margin: 0; padding: 0; list-style: none; }
+  .rules li { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; font: 12px/1.2 var(--mono); color: var(--ink-2); }
+  .rules li::before { content: "\00d7"; color: var(--red); font-weight: 700; }
+  .rules.ok li::before { content: "\2713"; color: var(--green); }
+
+  .kbds { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font: 13px var(--mono); color: var(--ink-3); }
+  kbd { padding: 8px 12px; background: linear-gradient(#fff, #f3f1ec); border: 1px solid var(--line-2); border-bottom-width: 3px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--ink); }
+
+  .lamps { display: flex; gap: 22px; }
+  .lamps figure { display: grid; justify-items: center; gap: 8px; margin: 0; }
+  .lamps .tl { width: 26px; height: 42px; gap: 5px; border-radius: 8px; }
+  .lamps .tl i { width: 14px; height: 14px; }
+  .lamps figcaption { font: 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+
+  .clip { display: grid; gap: 2px; padding: 6px; background: var(--obj); border-radius: 11px; }
+  .clip span { padding: 7px 10px; border-radius: 7px; font: 12.5px/1.4 var(--mono); color: var(--obj-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .clip span:first-child { background: var(--obj-2); color: var(--obj-ink); }
+
+  .big-num { font: 600 clamp(52px, 9vw, 76px)/1 var(--display); letter-spacing: -.05em; color: var(--green); }
+  .big-num small { font-size: .42em; color: var(--ink-3); letter-spacing: -.02em; }
+
+  /* ---------- scoreboard: green cells passed, red cells missed */
+
+  .board { background: var(--card); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--sh-2); overflow: hidden; }
+
+  .brow { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name score" "cells cells"; gap: 10px 14px; align-items: center; padding: 16px 18px; border-top: 1px solid var(--line); }
+  .brow:first-child { border-top: 0; }
+  .brow.hl { background: linear-gradient(90deg, var(--green-soft), transparent 70%); }
+
+  .bname { grid-area: name; min-width: 0; font: 500 13.5px/1.35 var(--mono); overflow-wrap: anywhere; }
+  .bname small { display: block; margin-top: 3px; font: 12.5px/1.4 var(--sans); color: var(--ink-3); }
+
+  .tag { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font: 600 9.5px/1.5 var(--mono); letter-spacing: .08em; text-transform: uppercase; vertical-align: 2px; background: var(--green); color: #fff; }
+  .tag.alt { background: var(--card); border: 1px solid var(--green); color: var(--green); }
+
+  .bscore { grid-area: score; text-align: right; font: 600 18px/1.2 var(--display); white-space: nowrap; }
+  .bscore small { display: block; font: 12px var(--mono); color: var(--ink-3); }
+
+  .cells { grid-area: cells; position: relative; height: 14px; background: repeating-linear-gradient(90deg, #f6c7c1 0 calc(100% / 28 - 3px), transparent calc(100% / 28 - 3px) calc(100% / 28)); }
+  .cells i { position: absolute; inset: 0 auto 0 0; width: calc(var(--s) / 28 * 100%); background: repeating-linear-gradient(90deg, #b9bdc3 0 calc(100% / var(--s) - 3px), transparent calc(100% / var(--s) - 3px) calc(100% / var(--s))); transform-origin: left; }
+  .hl .cells i { background: repeating-linear-gradient(90deg, var(--green-lamp) 0 calc(100% / var(--s) - 3px), transparent calc(100% / var(--s) - 3px) calc(100% / var(--s))); }
+
+  .reveal .cells i { transform: scaleX(0); transition: transform 1.1s cubic-bezier(.2, .7, .2, 1); }
+  .reveal.in .cells i { transform: none; }
+
+  .board-key { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 12px 18px; background: var(--card-2); border-top: 1px solid var(--line); font: 11.5px/1.5 var(--mono); color: var(--ink-3); }
+  .board-key span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 2px; background: var(--c); vertical-align: -1px; }
+
+  .note { margin-top: 14px; max-width: 70ch; font: 12.5px/1.7 var(--mono); color: var(--ink-3); }
+
+  /* ---------- speed */
+
+  .speed { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+
+  .bars { display: grid; gap: 22px; }
+  .bar-h { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; font: 13px/1.3 var(--mono); color: var(--ink-2); }
+  .bar-h b { font-weight: 600; color: var(--ink); }
+  .bar { display: flex; height: 18px; overflow: hidden; background: var(--card-2); border: 1px solid var(--line); border-radius: 6px; }
+  .bar i { height: 100%; }
+  .bar .a { background: var(--green); }
+  .bar .b { background: var(--green-lamp); }
+  .bar .c { background: #c9ccd1; }
+  .bar .d { background: #9ca1a8; }
+  .bar .e { background: repeating-linear-gradient(135deg, #9ca1a8 0 4px, #eceae5 4px 8px); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font: 11.5px/1.5 var(--mono); color: var(--ink-3); }
+  .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 7px; border-radius: 2px; background: var(--c); vertical-align: -1px; }
+
+  /* ---------- pipeline */
+
+  .flow { display: grid; grid-template-columns: minmax(0, 1fr); margin: 0; padding: 0; list-style: none; counter-reset: s; }
+
+  .flow li { position: relative; padding: 0 0 26px 48px; }
+  .flow li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line-2); border-radius: 50%; background: var(--card); box-shadow: var(--sh-1); font: 600 12px/1 var(--mono); color: var(--ink-2); }
+  .flow li.red::before { background: var(--red-soft); border-color: #f4b4ad; color: var(--red-ink); }
+  .flow li.grn::before { background: var(--green-soft); border-color: #9fdcb5; color: var(--green-ink); }
+  .flow li::after { content: ""; position: absolute; left: 15px; top: 32px; bottom: 2px; width: 1px; background: var(--line-2); }
+  .flow li:last-child::after { display: none; }
+  .flow b { display: flex; justify-content: space-between; gap: 12px; font: 600 16.5px/1.7 var(--display); }
+  .flow b span { font: 400 12px/2.3 var(--mono); color: var(--ink-3); white-space: nowrap; }
+  .flow p { font-size: 14.5px; color: var(--ink-2); }
+
+  /* ---------- install */
+
+  .inst { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+
+  .tabs { display: inline-flex; gap: 4px; padding: 4px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--sh-1); }
+  .tabs button { padding: 9px 17px; background: none; border: 0; border-radius: 999px; font: 500 13px/1 var(--sans); color: var(--ink-2); cursor: pointer; }
+  .tabs button:hover { color: var(--ink); }
+  .tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
+
+  .term { overflow: hidden; background: var(--obj); border: 1px solid #000; border-radius: 16px; box-shadow: var(--sh-2); }
+  .term-bar { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--obj-line); font: 12px/1 var(--mono); color: var(--obj-mute); }
+  .term-bar .dots { display: flex; gap: 6px; }
+  .term-bar .dots i { width: 10px; height: 10px; border-radius: 50%; }
+  .term-bar .dots i:first-child { background: #ef6b60; }
+  .term-bar .dots i:nth-child(2) { background: #e9b54c; }
+  .term-bar .dots i:last-child { background: #4fc77a; }
+
+  .copy { margin-left: auto; padding: 6px 11px; background: var(--obj-2); border: 1px solid var(--obj-line); border-radius: 7px; font: 500 11.5px/1 var(--mono); color: var(--obj-ink); cursor: pointer; }
+  .copy:hover { border-color: var(--obj-mute); }
+
+  pre { margin: 0; padding: 16px 18px 18px; overflow-x: auto; font: 13px/1.9 var(--mono); color: #e3e6ea; }
+  pre .c { color: #7d848e; }
+  pre .p { color: var(--green-lamp); user-select: none; }
+
+  .req { display: grid; gap: 10px; }
+  .req div { display: flex; gap: 12px; padding: 15px 16px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--sh-1); font-size: 14px; color: var(--ink-2); }
+  .req div b { display: block; color: var(--ink); font-weight: 600; }
+  .req .ico { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; background: var(--green-wash); color: var(--green); }
+
+  /* ---------- faq */
+
+  .faq { border-top: 1px solid var(--line-2); }
+  .faq details { border-bottom: 1px solid var(--line-2); }
+  .faq summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; font: 600 17.5px/1.35 var(--display); letter-spacing: -.01em; cursor: pointer; list-style: none; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; flex: none; display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line-2); border-radius: 50%; background: var(--card); font: 400 18px/1 var(--sans); color: var(--ink-2); transition: transform .2s, background .2s, color .2s; }
+  .faq details[open] summary::after { transform: rotate(45deg); background: var(--ink); color: #fff; border-color: var(--ink); }
+  .faq details p { max-width: 64ch; padding: 0 0 22px; font-size: 15px; color: var(--ink-2); }
+
+  /* ---------- final cta */
+
+  .final {
+    position: relative;
+    margin-top: 110px;
+    padding: 76px 20px;
+    text-align: center;
+    background:
+      radial-gradient(420px 240px at 22% 0%, rgba(239, 65, 54, .12), transparent 70%),
+      radial-gradient(460px 260px at 80% 100%, rgba(34, 197, 94, .18), transparent 70%),
+      var(--card);
+    border: 1px solid var(--line);
+    border-radius: 30px;
+    box-shadow: var(--sh-2);
+    overflow: hidden;
+  }
+
+  .final h2 { font-size: clamp(2.3rem, 7vw, 4.2rem); font-weight: 600; letter-spacing: -.045em; line-height: 1; }
+  .final h2 .rd { text-decoration: line-through; text-decoration-thickness: 3px; text-decoration-color: var(--red-lamp); color: var(--ink-3); }
+  .final h2 .serif { color: var(--green); }
+  .final p { max-width: 34rem; margin: 18px auto 0; color: var(--ink-2); }
+  .final .cta { justify-content: center; }
+  .final .tl { width: 34px; height: 56px; gap: 7px; border-radius: 11px; margin: 0 auto 26px; }
+  .final .tl i { width: 18px; height: 18px; }
+
+  footer { margin-top: 80px; padding: 30px 0 44px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-3); }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px 30px; }
+  footer a { color: var(--ink-2); text-decoration: none; }
+  footer a:hover { color: var(--ink); }
+  .flinks { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+
+  /* ============================================================ motion */
+
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 50% { opacity: .5; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes slide { to { transform: translateX(-50%); } }
+
+  .fade { opacity: 0; transform: translateY(18px); transition: opacity .7s ease, transform .7s ease; }
+  .fade.in { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .fade { opacity: 1; transform: none; }
+    .reveal .cells i { transform: none; }
+  }
+
+  /* ============================================================ wider */
+
+  @media (min-width: 600px) {
+    .wrap { padding: 0 28px; }
+    .links .opt { display: inline; }
+    .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .brow { grid-template-columns: minmax(0, 17rem) minmax(0, 1fr) 5.5rem; grid-template-areas: "name cells score"; gap: 22px; }
+    .fxrow { grid-template-columns: 10rem minmax(0, 1fr); gap: 24px; align-items: baseline; padding: 26px 24px; }
+    .fx-bar { padding: 16px 24px; }
+  }
+
+  @media (min-width: 960px) {
+    .hero { padding: 80px 0 56px; }
+    .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.02fr); gap: 56px; }
+    .bento { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .t-3 { grid-column: span 3; }
+    .t-2 { grid-column: span 2; }
+    .t-4 { grid-column: span 4; }
+    .speed { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
+    .split { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 64px; align-items: start; }
+    .split .sec-head { position: sticky; top: 100px; }
+    .inst { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
+    .sec { padding-top: 140px; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></symbol>
+  <symbol id="chk" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 8.5l3 3 7-7"/></symbol>
+  <symbol id="mic" viewBox="0 0 24 24"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></symbol>
+</svg>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <span class="tl" aria-hidden="true"><i class="r"></i><i class="gl off"></i></span>
+      type4voices
+    </a>
+    <nav class="links" aria-label="Sections">
+      <a class="opt" href="#fixer">English fixer</a>
+      <a class="opt" href="#models">Models</a>
+      <a class="opt" href="#install">Install</a>
+      <a class="pill-btn" href="https://github.com/jaxontan/type4voices"><svg width="15" height="15" aria-hidden="true"><use href="#gh"/></svg>GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ================================================================ hero -->
+
+  <section class="hero" id="top">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow">Local voice typing &middot; Windows &middot; macOS &middot; Linux</span>
+        <h1>Speak the way <span class="wavy">you speak</span>. <span class="serif">It types what you meant.</span></h1>
+        <p class="lead">Hold a button, talk, let go. Your words are transcribed <b>on your own machine</b>, and a small local model fixes broken grammar and misheard words before they reach the cursor, in any app.</p>
+        <div class="cta">
+          <a class="btn primary" href="#install">Install it free</a>
+          <a class="btn ghost" href="https://github.com/jaxontan/type4voices"><svg width="16" height="16" aria-hidden="true"><use href="#gh"/></svg>View source</a>
+        </div>
+        <div class="proof">
+          <span><svg width="14" height="14" aria-hidden="true"><use href="#chk"/></svg>Works offline</span>
+          <span><svg width="14" height="14" aria-hidden="true"><use href="#chk"/></svg>No account</span>
+          <span><svg width="14" height="14" aria-hidden="true"><use href="#chk"/></svg>~2.5 s to paste</span>
+        </div>
+      </div>
+
+      <div class="demo">
+        <div class="win" aria-label="Interactive demo: a chat window with a dictation panel">
+          <div class="win-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><b># release</b><span>&middot; any app with a cursor</span></div>
+          <div class="chat" id="chat" aria-live="polite">
+            <div class="msg"><span class="av" style="background:#5b6cf0">A</span><div><div class="who">Arjun<small>10:38</small></div><p>Staging build is green. Shipping after lunch?</p></div></div>
+            <div class="msg"><span class="av" style="background:#e9a23b">M</span><div><div class="who">Mei<small>10:41</small></div><p>Is the login crash fixed yet?</p></div></div>
+          </div>
+          <div class="composer" id="composer"><span class="ph" id="ph">Message #release</span><span id="typed"></span><span class="caret" aria-hidden="true"></span></div>
+          <div class="hud" id="hud" data-state="idle" aria-hidden="true">
+            <div class="hud-top">
+              <span class="hud-dot"></span>
+              <span class="hud-label" id="hudLabel">Ready</span>
+              <span class="spin"></span>
+              <span class="wave" id="wave"></span>
+              <span class="hud-time" id="hudTime"></span>
+            </div>
+            <div class="hud-text" id="hudText"></div>
+          </div>
+        </div>
+        <div class="try">
+          <button class="hold" id="hold" type="button"><span class="mic"><svg width="15" height="15" aria-hidden="true"><use href="#mic"/></svg></span>Hold to dictate</button>
+          <span class="try-note">a simulation, no microphone used</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ apps -->
+
+  <section class="apps" aria-label="Works in any app">
+    <div class="wrap"><p>Wherever there&rsquo;s a cursor</p></div>
+    <div class="marquee" aria-hidden="true">
+      <div class="track-m">
+        <span>Email</span><span>Chat</span><span>Code editors</span><span>Docs</span><span>Notes</span><span>Terminals</span><span>Browsers</span><span>Tickets</span><span>Spreadsheets</span><span>Prompts</span>
+        <span>Email</span><span>Chat</span><span>Code editors</span><span>Docs</span><span>Notes</span><span>Terminals</span><span>Browsers</span><span>Tickets</span><span>Spreadsheets</span><span>Prompts</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ fixer -->
+
+  <section class="sec" id="fixer">
+    <div class="wrap">
+      <div class="sec-head fade">
+        <span class="eyebrow">English fixer</span>
+        <h2>Other dictation types <span class="rd">what it heard.</span> <span class="serif">This types what you meant.</span></h2>
+        <p>The speech model writes down exactly what it hears, mistakes and all. A second model on your machine reads the whole sentence and rewrites it into clear English. Flip the switch to compare.</p>
+      </div>
+
+      <div class="fx fade" id="fx" data-on="true">
+        <div class="fx-bar">
+          <span class="state">Showing: <b id="fxState">what gets pasted</b></span>
+          <button class="switch" id="fxSwitch" type="button" role="switch" aria-checked="true">Fix my English <span class="knob" aria-hidden="true"></span></button>
+        </div>
+        <div class="fxrow">
+          <span class="fxtag">Grammar</span>
+          <div class="fxtext">
+            <p class="h">I already <u>tell</u> him many <u>time</u> but he still <u>never fix</u> the bug.</p>
+            <p class="p">I&rsquo;ve already <mark>told</mark> him many <mark>times</mark>, but he still <mark>hasn&rsquo;t fixed</mark> the bug.</p>
+          </div>
+        </div>
+        <div class="fxrow">
+          <span class="fxtag">Misheard</span>
+          <div class="fxtext">
+            <p class="h">I want to deploy the model on the <u>GP you</u> so the inference <u>more fast</u>.</p>
+            <p class="p">I want to deploy the model on the <mark>GPU</mark> so that inference is <mark>faster</mark>.</p>
+          </div>
+        </div>
+        <div class="fxrow">
+          <span class="fxtag">Fixed, not obeyed</span>
+          <div class="fxtext">
+            <p class="h">Write <u>a</u> email to my boss <u>say</u> I am sick today.</p>
+            <p class="p">Write <mark>an</mark> email to my boss <mark>saying</mark> I am sick today.</p>
+          </div>
+        </div>
+        <div class="fxrow">
+          <span class="fxtag">Trimmed</span>
+          <div class="fxtext">
+            <p class="h"><u>&hellip;you all</u> please don&rsquo;t <u>late</u>.</p>
+            <p class="p">Please don&rsquo;t <mark>be</mark> late.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- bento -->
+      <div class="bento">
+        <div class="tile t-3 tint-g fade">
+          <span class="k">Two hearings</span>
+          <h3>Where you mumbled, it knows.</h3>
+          <p>Each clip is transcribed twice in one GPU call, with and without your accent note. Where they disagree, the fixer sees both. Cost: 0.15&nbsp;s.</p>
+          <div class="vis mono-box"><span class="dim">A </span>send me the <span class="bad">in voice</span> by Friday<br><span class="dim">B </span>send me the <span class="good">invoice</span> by Friday</div>
+        </div>
+        <div class="tile t-3 tint-g fade">
+          <span class="k">Recent context</span>
+          <h3>The topic settles the word.</h3>
+          <p>Your last two dictations from the past three minutes ride along, so a sound-alike resolves to what you&rsquo;ve been talking about.</p>
+          <div class="vis mono-box"><span class="dim">earlier </span>the script crashes on import<br><span class="dim">now&nbsp;&nbsp;&nbsp;&nbsp;</span><span class="bad">pie tone</span> <span class="dim">&rarr;</span> <span class="good">Python</span></div>
+        </div>
+        <div class="tile t-4 tint-r fade">
+          <span class="k">Guardrails</span>
+          <h3>It won&rsquo;t put words in your mouth.</h3>
+          <p>If a rewrite looks wrong in any of these ways, it&rsquo;s thrown away and your raw transcript is pasted instead. One- and two-word dictations are never rewritten.</p>
+          <ul class="rules vis">
+            <li>changes a number</li><li>grows past 1.6&times;</li><li>shrinks below 0.5&times;</li><li>keeps &lt;60% of your words</li><li>answers instead of fixing</li><li>adds paragraphs</li><li>translates</li><li>repeats the last dictation</li>
+          </ul>
+        </div>
+        <div class="tile t-2 fade">
+          <span class="k">corrections.txt</span>
+          <h3>Teach it your repeat mistakes.</h3>
+          <div class="vis mono-box"><span class="bad">data bass</span> <span class="dim">=&gt;</span> <span class="good">database</span><br><span class="bad">cube control</span> <span class="dim">=&gt;</span> <span class="good">kubectl</span></div>
+        </div>
+        <div class="tile t-2 fade">
+          <span class="k">Tray</span>
+          <h3>A traffic light is the whole UI.</h3>
+          <div class="vis lamps">
+            <figure><span class="tl" aria-hidden="true"><i class="r"></i><i class="gl off"></i></span><figcaption>Ready</figcaption></figure>
+            <figure><span class="tl" aria-hidden="true"><i class="r off"></i><i class="gl"></i></span><figcaption>Working</figcaption></figure>
+            <figure><span class="tl" aria-hidden="true"><i class="r off"></i><i class="gl off"></i></span><figcaption>Paused</figcaption></figure>
+          </div>
+        </div>
+        <div class="tile t-2 fade">
+          <span class="k">Any shortcut</span>
+          <h3>Mouse side button, or record your own.</h3>
+          <div class="vis kbds"><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>J</kbd></div>
+        </div>
+        <div class="tile t-2 fade">
+          <span class="k">Clipboard history</span>
+          <h3>Left-click the light for your last five copies.</h3>
+          <div class="vis clip"><span>Ship the build after lunch.</span><span>Call 5551234 before five.</span><span>It costs 3200 dollars.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ models -->
+
+  <section class="sec" id="models">
+    <div class="wrap">
+      <div class="sec-head fade">
+        <span class="eyebrow">Models</span>
+        <h2>We tested twelve. <span class="serif">You get the two best.</span></h2>
+        <p>Every candidate ran 28 weak-English sentences: grammar, misheard words, context, traps that must be fixed rather than answered, sentences to leave alone, and numbers. Each was scored on the text that would actually be pasted. Switch between the winners from the tray.</p>
+      </div>
+
+      <div class="board reveal fade" id="board" role="table" aria-label="English fixer scores out of 28 and average time per sentence">
+        <div class="brow hl" role="row">
+          <div class="bname" role="cell">google/gemma-4-E2B-it<span class="tag">best</span><small>Fixed &ldquo;pie tone&rdquo; and &ldquo;in voice&rdquo; from context, every trap</small></div>
+          <div class="cells" role="cell" style="--s:28" aria-label="28 of 28"><i></i></div>
+          <div class="bscore" role="cell">28/28<small>1.44 s</small></div>
+        </div>
+        <div class="brow" role="row">
+          <div class="bname" role="cell">Qwen/Qwen3-4B-Instruct-2507<small>Twice the time for one more case</small></div>
+          <div class="cells" role="cell" style="--s:27" aria-label="27 of 28"><i></i></div>
+          <div class="bscore" role="cell">27/28<small>2.03 s</small></div>
+        </div>
+        <div class="brow hl" role="row">
+          <div class="bname" role="cell">Qwen/Qwen3-1.7B<span class="tag alt">default</span><small>27/28 with corrections.txt; never changed a meaning</small></div>
+          <div class="cells" role="cell" style="--s:26" aria-label="26 of 28"><i></i></div>
+          <div class="bscore" role="cell">26/28<small>1.02 s</small></div>
+        </div>
+        <div class="brow" role="row">
+          <div class="bname" role="cell">Qwen/Qwen2.5-1.5B-Instruct<small>&ldquo;Please don&rsquo;t be late&rdquo; became &ldquo;Please arrive early&rdquo;</small></div>
+          <div class="cells" role="cell" style="--s:26" aria-label="26 of 28"><i></i></div>
+          <div class="bscore" role="cell">26/28<small>0.75 s</small></div>
+        </div>
+        <div class="brow" role="row">
+          <div class="bname" role="cell">SmolLM2-1.7B-Instruct<small>Edits sentences that were already right</small></div>
+          <div class="cells" role="cell" style="--s:24" aria-label="24 of 28"><i></i></div>
+          <div class="bscore" role="cell">24/28<small>1.03 s</small></div>
+        </div>
+        <div class="brow" role="row">
+          <div class="bname" role="cell">Qwen/Qwen3-0.6B<small>Leaves most misheard words alone</small></div>
+          <div class="cells" role="cell" style="--s:21" aria-label="21 of 28"><i></i></div>
+          <div class="bscore" role="cell">21/28<small>0.63 s</small></div>
+        </div>
+        <div class="brow" role="row">
+          <div class="bname" role="cell">openbmb/MiniCPM5-1B<small>Answers questions instead of fixing them</small></div>
+          <div class="cells" role="cell" style="--s:17" aria-label="17 of 28"><i></i></div>
+          <div class="bscore" role="cell">17/28<small>0.49 s</small></div>
+        </div>
+        <div class="board-key" aria-hidden="true">
+          <span style="--c:var(--green-lamp)">passed (in the app)</span>
+          <span style="--c:#b9bdc3">passed</span>
+          <span style="--c:#f6c7c1">missed</span>
+        </div>
+      </div>
+      <p class="note">Measured 2026-11-16 on an Intel Arc 130V, bf16, greedy decoding, without corrections.txt. The prompt was tuned on Qwen, so the comparison favours it a little. The full table of 12 and the eval script are in the README.</p>
+    </div>
+  </section>
+
+  <!-- ================================================================ speed + privacy -->
+
+  <section class="sec" id="speed">
+    <div class="wrap">
+      <div class="sec-head fade">
+        <span class="eyebrow">On-device</span>
+        <h2>Nothing leaves your machine. <span class="serif">It&rsquo;s still fast.</span></h2>
+      </div>
+
+      <div class="speed">
+        <div class="tile tint-g fade">
+          <span class="k">Let go &rarr; pasted</span>
+          <div class="big-num">2.5<small> s</small></div>
+          <p>For a spoken sentence on a Core Ultra 5 laptop with its built-in Arc GPU. Transcription and the English fix take about a second each.</p>
+          <ul class="rules ok vis" style="margin-top:6px">
+            <li>No upload</li><li>No account</li><li>No telemetry</li><li>HF_HUB_OFFLINE=1</li>
+          </ul>
+        </div>
+        <div class="tile fade">
+          <span class="k">Where the time goes</span>
+          <div class="bars">
+            <div>
+              <div class="bar-h"><b>Arc GPU</b><span>&asymp; 2.5 s</span></div>
+              <div class="bar" role="img" aria-label="GPU: 1 second transcribing, 1 second fixing, half a second to paste"><i class="a" style="width:12.5%"></i><i class="b" style="width:12.5%"></i><i class="c" style="width:6.25%"></i></div>
+            </div>
+            <div>
+              <div class="bar-h"><b>CPU only</b><span>5&ndash;7 s + fixer</span></div>
+              <div class="bar" role="img" aria-label="CPU: 5 to 7 seconds transcribing; fixer time on CPU not measured"><i class="d" style="width:75%"></i><i class="e" style="width:25%"></i></div>
+            </div>
+          </div>
+          <div class="legend vis">
+            <span style="--c:var(--green)">transcribe</span>
+            <span style="--c:var(--green-lamp)">fix English</span>
+            <span style="--c:#c9ccd1">paste</span>
+            <span style="--c:#9ca1a8">CPU transcribe</span>
+            <span style="--c:repeating-linear-gradient(135deg,#9ca1a8 0 2px,#eceae5 2px 4px)">CPU fixer: not measured</span>
+          </div>
+          <p>NVIDIA, Apple and Intel Arc GPUs are picked up automatically, and it falls back to the CPU if the GPU fails.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ flow -->
+
+  <section class="sec" id="how">
+    <div class="wrap split">
+      <div class="sec-head fade">
+        <span class="eyebrow">Under the hood</span>
+        <h2>From button to cursor <span class="serif">in seven steps.</span></h2>
+        <p>One dictation is processed at a time, so quick ones queue instead of fighting over the GPU. The log keeps what was heard next to what was pasted.</p>
+      </div>
+      <ol class="flow">
+        <li class="fade red"><b>Record <span>16 kHz</span></b><p>Hold the shortcut. On Windows it&rsquo;s swallowed, so the side button stops paging your browser back.</p></li>
+        <li class="fade red"><b>Gate <span>&lt; 0.5 s dropped</span></b><p>Silence is trimmed, quiet speech boosted, and clips with no speech (a fan, a knock) are dropped.</p></li>
+        <li class="fade red"><b>Transcribe twice <span>~1 s</span></b><p>Qwen3-ASR-1.7B, with and without your accent note, in one batched call.</p></li>
+        <li class="fade"><b>Clean up <span>instant</span></b><p>&ldquo;one two three&rdquo; becomes 123, &ldquo;comma&rdquo; becomes a comma, filler words go. Then corrections.txt.</p></li>
+        <li class="fade grn"><b>Fix the English <span>~1 s</span></b><p>The local model gets both hearings plus your recent dictations as context.</p></li>
+        <li class="fade grn"><b>Check <span>instant</span></b><p>Guardrails compare the rewrite with the transcript. When in doubt, the transcript wins.</p></li>
+        <li class="fade grn"><b>Paste <span>Ctrl/Cmd+V</span></b><p>Into whatever window has focus. The text stays on the clipboard too.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ================================================================ install -->
+
+  <section class="sec" id="install">
+    <div class="wrap">
+      <div class="sec-head fade">
+        <span class="eyebrow">Install</span>
+        <h2>Set up in five minutes. <span class="serif">Then it&rsquo;s offline for good.</span></h2>
+      </div>
+
+      <div class="inst">
+        <div class="fade">
+          <div class="tabs" role="tablist" aria-label="Operating system">
+            <button role="tab" aria-selected="true" aria-controls="p-win" id="t-win" data-os="win">Windows</button>
+            <button role="tab" aria-selected="false" aria-controls="p-mac" id="t-mac" data-os="mac" tabindex="-1">macOS</button>
+            <button role="tab" aria-selected="false" aria-controls="p-lin" id="t-lin" data-os="lin" tabindex="-1">Linux</button>
+          </div>
+
+          <div class="term" style="margin-top:16px">
+            <div class="term-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span id="shell">PowerShell</span><button class="copy" id="copy" type="button">Copy</button></div>
+<pre role="tabpanel" id="p-win" aria-labelledby="t-win"><span class="p">&gt; </span>windows\setup.bat
+<span class="c"># the speech model, then the English fixer (~8 GB, once)</span>
+<span class="p">&gt; </span>.venv\Scripts\python.exe download_model.py
+<span class="p">&gt; </span>.venv\Scripts\python.exe download_model.py --model Qwen/Qwen3-1.7B
+<span class="p">&gt; </span>windows\run_dictate_background.vbs</pre>
+<pre role="tabpanel" id="p-mac" aria-labelledby="t-mac" hidden><span class="p">$ </span>cd macos &amp;&amp; chmod +x *.sh run_dictate.command &amp;&amp; ./setup.sh &amp;&amp; cd ..
+<span class="c"># the speech model, then the English fixer (~8 GB, once)</span>
+<span class="p">$ </span>.venv/bin/python download_model.py
+<span class="p">$ </span>.venv/bin/python download_model.py --model Qwen/Qwen3-1.7B
+<span class="p">$ </span>./macos/run_dictate.sh</pre>
+<pre role="tabpanel" id="p-lin" aria-labelledby="t-lin" hidden><span class="p">$ </span>sudo apt install python3-venv python3-tk libportaudio2 xclip
+<span class="p">$ </span>cd linux &amp;&amp; chmod +x *.sh &amp;&amp; ./setup.sh &amp;&amp; cd ..
+<span class="c"># the speech model, then the English fixer (~8 GB, once)</span>
+<span class="p">$ </span>.venv/bin/python download_model.py
+<span class="p">$ </span>.venv/bin/python download_model.py --model Qwen/Qwen3-1.7B
+<span class="p">$ </span>./linux/run_dictate.sh</pre>
+          </div>
+        </div>
+
+        <div class="req fade">
+          <div><span class="ico"><svg width="16" height="16" aria-hidden="true"><use href="#chk"/></svg></span><span><b>Python 3.10+</b>3.12 recommended. On Windows, tick &ldquo;Add python.exe to PATH&rdquo;.</span></div>
+          <div><span class="ico"><svg width="16" height="16" aria-hidden="true"><use href="#chk"/></svg></span><span><b>About 10 GB of disk</b>Speech model 4.4 GB, English fixer 3.4 GB, plus the environment.</span></div>
+          <div><span class="ico"><svg width="16" height="16" aria-hidden="true"><use href="#chk"/></svg></span><span><b>A GPU helps a lot</b>On Intel Arc / Core Ultra, install the XPU build of torch for 6&ndash;7&times; faster transcription. Check with <code>dictate.py --doctor</code>.</span></div>
+          <div><span class="ico"><svg width="16" height="16" aria-hidden="true"><use href="#chk"/></svg></span><span><b>First start: ~45 s</b>When the tray light turns red, hold the shortcut and talk.</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ faq -->
+
+  <section class="sec" id="faq">
+    <div class="wrap split">
+      <div class="sec-head fade">
+        <span class="eyebrow">Questions</span>
+        <h2>The honest <span class="serif">fine print.</span></h2>
+      </div>
+      <div class="faq fade">
+        <details open>
+          <summary>Does anything get sent to the internet?</summary>
+          <p>No. The models are downloaded once from Hugging Face. After that the app runs with <code>HF_HUB_OFFLINE=1</code>: no upload, no account, no telemetry. Audio and text stay on your machine.</p>
+        </details>
+        <details>
+          <summary>Is it tested on macOS and Linux?</summary>
+          <p>Not yet on real hardware. It was built and measured on Windows 11 (Core Ultra 5 228V). The macOS and Linux code paths are written and share the same core. On Linux you need an X11 session, because Wayland blocks global shortcuts and tray icons for ordinary apps.</p>
+        </details>
+        <details>
+          <summary>Which languages work?</summary>
+          <p>Speech recognition covers 52 languages and dialects, including strong Chinese and mixed Chinese-English. The rewrite step is for English only, so turn off <em>Fix my English</em> in the tray if you dictate in another language.</p>
+        </details>
+        <details>
+          <summary>What if the fixer changes my meaning?</summary>
+          <p>The guardrails reject most bad rewrites and paste your raw words instead. The log keeps what was heard next to what was pasted, so you can add repeat mistakes to <code>corrections.txt</code>, or switch the fixer off with one click.</p>
+        </details>
+        <details>
+          <summary>Can I use Gemma 4 instead of Qwen?</summary>
+          <p>Yes, from the tray. Gemma 4 E2B scored 28/28 but needs transformers 5, so it runs as a worker in a second environment (<code>.venv-t5</code>). If it fails to load, the app falls back to Qwen3-1.7B and says why in the log.</p>
+        </details>
+        <details>
+          <summary>Why doesn&rsquo;t it type into some windows?</summary>
+          <p>Windows won&rsquo;t let a normal app send keystrokes to one running as administrator. Use <em>Restart as Administrator</em> from the tray for those.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ final -->
+
+  <section class="wrap">
+    <div class="final fade">
+      <span class="tl" aria-hidden="true"><i class="r off"></i><i class="gl"></i></span>
+      <h2><span class="rd">Stop typing.</span> <span class="serif">Start saying.</span></h2>
+      <p>Free, local and private. Your voice and your words never leave your machine.</p>
+      <div class="cta">
+        <a class="btn primary" href="#install">Install it free</a>
+        <a class="btn ghost" href="https://github.com/jaxontan/type4voices"><svg width="16" height="16" aria-hidden="true"><use href="#gh"/></svg>Star on GitHub</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Built by Jaxon Tan at <a href="https://frogineer.com">frogineer</a>, Singapore &middot; <a href="https://jaxon.frogineering.com">portfolio</a></span>
+    <span class="flinks">
+      <a href="https://github.com/jaxontan/type4voices">GitHub</a>
+      <a href="https://github.com/jaxontan/type4voices/blob/main/README.md">README</a>
+      <a href="https://github.com/jaxontan/type4voices/blob/main/MODEL_NOTES.md">Model notes</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- nav border on scroll */
+  const nav = document.getElementById('nav');
+  const onScroll = () => nav.classList.toggle('scrolled', scrollY > 8);
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  /* ---------- reveal on scroll */
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
+    entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: .12, rootMargin: '0px 0px -40px 0px' }) : null;
+  document.querySelectorAll('.fade, .reveal').forEach((el) => io ? io.observe(el) : el.classList.add('in'));
+
+  /* ---------- English fixer toggle */
+  const fx = document.getElementById('fx');
+  const sw = document.getElementById('fxSwitch');
+  const fxState = document.getElementById('fxState');
+  sw.addEventListener('click', () => {
+    const on = sw.getAttribute('aria-checked') !== 'true';
+    sw.setAttribute('aria-checked', String(on));
+    fx.dataset.on = String(on);
+    fxState.textContent = on ? 'what gets pasted' : 'what the speech model heard';
+  });
+
+  /* ---------- install tabs, preselected for this OS */
+  const tabs = [...document.querySelectorAll('.tabs [role=tab]')];
+  const shells = { win: 'PowerShell', mac: 'Terminal', lin: 'Terminal' };
+  const shell = document.getElementById('shell');
+  function pick(tab, focus) {
+    tabs.forEach((t) => {
+      const on = t === tab;
+      t.setAttribute('aria-selected', String(on));
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+    });
+    shell.textContent = shells[tab.dataset.os];
+    if (focus) tab.focus();
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => pick(t));
+    t.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        pick(tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length], true);
+      }
+    });
+  });
+  const ua = navigator.userAgent;
+  if (/Mac/.test(ua) && !/iPhone|iPad/.test(ua)) pick(tabs[1]);
+  else if (/Linux/.test(ua) && !/Android/.test(ua)) pick(tabs[2]);
+
+  /* ---------- copy commands (without prompts or comments) */
+  const copyBtn = document.getElementById('copy');
+  copyBtn.addEventListener('click', async () => {
+    const pre = document.querySelector('pre[role=tabpanel]:not([hidden])');
+    const clone = pre.cloneNode(true);
+    clone.querySelectorAll('.p, .c').forEach((n) => n.remove());
+    const text = clone.textContent.split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+    try { await navigator.clipboard.writeText(text); copyBtn.textContent = 'Copied'; }
+    catch (e) { copyBtn.textContent = 'Select & copy'; }
+    setTimeout(() => (copyBtn.textContent = 'Copy'), 1600);
+  });
+
+  /* ---------- the dictation demo */
+  const EX = [
+    { heard: 'I already tell him many time but he still never fix the bug', fixed: 'I’ve already told him many times, but he still hasn’t fixed the bug.' },
+    { heard: 'I want to deploy the model on the GP you so the inference more fast', fixed: 'I want to deploy the model on the GPU so that inference is faster.' },
+    { heard: 'you all please don’t late for the demo', fixed: 'Please don’t be late for the demo.' },
+    { heard: 'can you send me the in voice by Friday', fixed: 'Can you send me the invoice by Friday?' }
+  ];
+  const REPLIES = ['Ugh. I’ll ping him.', 'Makes sense, go for it.', 'Noted 👍', 'Sending it now.'];
+
+  const hud = document.getElementById('hud');
+  const hudLabel = document.getElementById('hudLabel');
+  const hudTime = document.getElementById('hudTime');
+  const hudText = document.getElementById('hudText');
+  const wave = document.getElementById('wave');
+  const typed = document.getElementById('typed');
+  const ph = document.getElementById('ph');
+  const chat = document.getElementById('chat');
+  const composer = document.getElementById('composer');
+  const hold = document.getElementById('hold');
+
+  const N = 34;
+  const bars = Array.from({ length: N }, () => wave.appendChild(document.createElement('i')));
+
+  let idx = 0, timers = [], raf = 0, t0 = 0, state = 'idle', auto = !reduce, resumeT = 0;
+
+  const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+  const clearAll = () => { timers.forEach(clearTimeout); timers = []; cancelAnimationFrame(raf); };
+  const now = () => new Date().toTimeString().slice(0, 5);
+
+  function setState(s, label) {
+    state = s;
+    hud.dataset.state = s;
+    hudLabel.textContent = label;
+    composer.classList.toggle('active', s !== 'idle');
+  }
+
+  function addMsg(name, color, text, me) {
+    const m = document.createElement('div');
+    m.className = 'msg' + (me ? ' me' : '');
+    m.innerHTML = '<span class="av"></span><div><div class="who"></div><p></p></div>';
+    m.querySelector('.av').style.background = color;
+    m.querySelector('.av').textContent = name[0];
+    m.querySelector('.who').innerHTML = name + '<small>' + now() + '</small>';
+    m.querySelector('p').textContent = text;
+    chat.appendChild(m);
+    while (chat.children.length > 4) chat.firstElementChild.remove();
+  }
+
+  function animateWave() {
+    const t = (performance.now() - t0) / 1000;
+    hudTime.textContent = '0:' + String(Math.floor(t)).padStart(2, '0');
+    bars.forEach((b, i) => {
+      const env = .35 + .65 * Math.abs(Math.sin(t * 2.3 + i * .21));
+      b.style.height = (3 + Math.random() * 17 * env) + 'px';
+    });
+    raf = requestAnimationFrame(animateWave);
+  }
+
+  function startRec() {
+    clearAll();
+    typed.textContent = '';
+    ph.hidden = false;
+    hudText.textContent = '';
+    setState('rec', 'Recording');
+    t0 = performance.now();
+    if (reduce) hudTime.textContent = '0:03'; else animateWave();
+  }
+
+  function stopRec() {
+    if (state !== 'rec') return;
+    cancelAnimationFrame(raf);
+    bars.forEach((b) => (b.style.height = '3px'));
+    const ex = EX[idx % EX.length];
+    setState('asr', 'Transcribing…');
+    hudTime.textContent = '';
+    later(() => {
+      setState('fix', 'Fixing English…');
+      hudText.textContent = ex.heard;
+      later(() => typeOut(ex), 950);
+    }, 750);
+  }
+
+  function typeOut(ex) {
+    setState('done', 'Pasted');
+    hudText.textContent = ex.fixed;
+    ph.hidden = true;
+    if (reduce) { typed.textContent = ex.fixed; return send(ex); }
+    let n = 0;
+    (function step() {
+      n += 2;
+      typed.textContent = ex.fixed.slice(0, n);
+      if (n < ex.fixed.length) later(step, 16); else send(ex);
+    })();
+  }
+
+  function send(ex) {
+    later(() => {
+      addMsg('You', '#128a43', ex.fixed, true);
+      typed.textContent = '';
+      ph.hidden = false;
+      const i = idx;
+      idx++;
+      later(() => addMsg('Mei', '#e9a23b', REPLIES[i % REPLIES.length]), 900);
+      later(() => { setState('idle', 'Ready'); hudText.textContent = ''; }, 1600);
+      if (auto) later(loop, 3200);
+    }, 1100);
+  }
+
+  function loop() {
+    if (!auto || document.hidden) return;
+    startRec();
+    later(stopRec, 2300);
+  }
+
+  function down(e) {
+    e.preventDefault();
+    auto = false;
+    clearTimeout(resumeT);
+    hold.classList.add('down');
+    startRec();
+  }
+
+  function up() {
+    if (!hold.classList.contains('down')) return;
+    hold.classList.remove('down');
+    stopRec();
+    if (!reduce) resumeT = setTimeout(() => { auto = true; if (state === 'idle') loop(); }, 9000);
+  }
+
+  hold.addEventListener('pointerdown', down);
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => hold.addEventListener(ev, up));
+  hold.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) down(e); });
+  hold.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') up(); });
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && auto && state === 'idle') loop(); });
+
+  if (reduce) {
+    const ex = EX[0];
+    setState('done', 'Pasted');
+    hudText.textContent = ex.fixed;
+    addMsg('You', '#128a43', ex.fixed, true);
+    idx = 1;
+  } else {
+    later(loop, 900);
+  }
+})();
+</script>
+</body>
+</html>

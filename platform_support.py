@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -456,6 +457,298 @@ def permission_report() -> list[tuple[str, str]]:
         )
 
     return lines
+
+
+# ------------------------------------------------------------- hardware check --
+def system_hardware_report() -> dict[str, Any]:
+    """Inspect system hardware (CPU, RAM, Disk, GPU, NPU) cleanly and cross-platform."""
+    report: dict[str, Any] = {
+        "os": "",
+        "cpu": "",
+        "cores": os.cpu_count() or 1,
+        "ram_total_gb": None,
+        "ram_free_gb": None,
+        "disk_free_gb": None,
+        "gpus": [],
+        "npus": [],
+        "vc_redist": None,
+    }
+
+    try:
+        _, _, free_b = shutil.disk_usage(os.path.dirname(os.path.abspath(__file__)))
+        report["disk_free_gb"] = round(free_b / (1024**3), 1)
+    except Exception:
+        pass
+
+    if IS_WINDOWS:
+        try:
+            report["os"] = f"Windows {platform.release()} ({platform.machine()})"
+        except Exception:
+            report["os"] = f"Windows ({platform.machine()})"
+
+        try:
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                report["ram_total_gb"] = round(stat.ullTotalPhys / (1024**3), 1)
+                report["ram_free_gb"] = round(stat.ullAvailPhys / (1024**3), 1)
+        except Exception:
+            pass
+
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"HARDWARE\DESCRIPTION\System\CentralProcessor\0",
+            ) as k:
+                report["cpu"] = winreg.QueryValueEx(k, "ProcessorNameString")[0].strip()
+        except Exception:
+            report["cpu"] = platform.processor() or "Unknown CPU"
+
+        try:
+            import winreg
+
+            base = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base) as k:
+                for i in range(winreg.QueryInfoKey(k)[0]):
+                    sub = winreg.EnumKey(k, i)
+                    if sub.isdigit():
+                        try:
+                            with winreg.OpenKey(k, sub) as sk:
+                                desc = winreg.QueryValueEx(sk, "DriverDesc")[0]
+                                if "Virtual" not in desc:
+                                    ver = winreg.QueryValueEx(sk, "DriverVersion")[0]
+                                    report["gpus"].append(f"{desc} (Driver {ver})")
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        try:
+            import winreg
+
+            base = r"SYSTEM\CurrentControlSet\Control\Class\{f01a9d53-3ff6-48d2-9f97-c8a7004be10c}"
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, base) as k:
+                for i in range(winreg.QueryInfoKey(k)[0]):
+                    sub = winreg.EnumKey(k, i)
+                    if sub.isdigit():
+                        try:
+                            with winreg.OpenKey(k, sub) as sk:
+                                desc = winreg.QueryValueEx(sk, "DriverDesc")[0]
+                                report["npus"].append(desc)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+        try:
+            import winreg
+
+            with winreg.OpenKey(
+                winreg.HKEY_LOCAL_MACHINE,
+                r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64",
+            ) as k:
+                installed, _ = winreg.QueryValueEx(k, "Installed")
+                report["vc_redist"] = installed == 1
+        except Exception:
+            report["vc_redist"] = False
+
+    elif IS_MACOS:
+        report["os"] = f"macOS {platform.mac_ver()[0]} ({platform.machine()})"
+        try:
+            report["cpu"] = subprocess.check_output(
+                ["sysctl", "-n", "machdep.cpu.brand_string"], text=True
+            ).strip()
+        except Exception:
+            report["cpu"] = platform.processor() or "Apple Silicon"
+        try:
+            mem = int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True))
+            report["ram_total_gb"] = round(mem / (1024**3), 1)
+        except Exception:
+            pass
+        if "arm" in platform.machine().lower() or "apple" in platform.processor().lower():
+            report["gpus"].append("Apple Silicon Integrated GPU (Metal)")
+            report["npus"].append("Apple Neural Engine (ANE)")
+
+    elif IS_LINUX:
+        report["os"] = f"Linux ({platform.machine()})"
+        try:
+            with open("/proc/cpuinfo", encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("model name"):
+                        report["cpu"] = line.split(":", 1)[1].strip()
+                        break
+        except Exception:
+            report["cpu"] = platform.processor() or "Unknown CPU"
+        try:
+            with open("/proc/meminfo", encoding="utf-8") as f:
+                mem_kb = {}
+                for line in f:
+                    parts = line.split()
+                    if parts:
+                        mem_kb[parts[0].rstrip(":")] = int(parts[1])
+                if "MemTotal" in mem_kb:
+                    report["ram_total_gb"] = round(mem_kb["MemTotal"] / (1024**2), 1)
+                if "MemAvailable" in mem_kb:
+                    report["ram_free_gb"] = round(mem_kb["MemAvailable"] / (1024**2), 1)
+        except Exception:
+            pass
+
+    return report
+
+
+def promote_tray_icon() -> bool:
+    """On Windows 11, ensure the app's notification icon stays promoted to the visible taskbar."""
+    if not IS_WINDOWS:
+        return False
+    try:
+        import winreg
+
+        base_path = r"Control Panel\NotifyIconSettings"
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, base_path, 0, winreg.KEY_READ) as root:
+            count = winreg.QueryInfoKey(root)[0]
+            for i in range(count):
+                subkey_name = winreg.EnumKey(root, i)
+                try:
+                    with winreg.OpenKey(
+                        root, subkey_name, 0, winreg.KEY_READ | winreg.KEY_SET_VALUE
+                    ) as sk:
+                        exe_path, _ = winreg.QueryValueEx(sk, "ExecutablePath")
+                        exe_lower = str(exe_path).lower()
+                        if "python" in exe_lower or "dictate" in exe_lower:
+                            is_promoted, _ = winreg.QueryValueEx(sk, "IsPromoted")
+                            if is_promoted != 1:
+                                winreg.SetValueEx(sk, "IsPromoted", 0, winreg.REG_DWORD, 1)
+                except Exception:
+                    pass
+        return True
+    except Exception:
+        return False
+
+
+# ------------------------------------------------------------ active window --
+def active_window_info() -> tuple[str, str]:
+    """Return `(process_name, window_title)` for the currently focused window.
+
+    Fast (<1 ms on Windows) and never raises: returns `("", "")` if the OS
+    cannot report the foreground window.
+    """
+    if IS_WINDOWS:
+        try:
+            from ctypes import wintypes
+
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+            user32.GetForegroundWindow.restype = wintypes.HWND
+            user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+            user32.GetWindowTextLengthW.restype = ctypes.c_int
+            user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+            user32.GetWindowTextW.restype = ctypes.c_int
+            user32.GetWindowThreadProcessId.argtypes = [
+                wintypes.HWND, ctypes.POINTER(wintypes.DWORD)
+            ]
+            user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+            kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            kernel32.QueryFullProcessImageNameW.argtypes = [
+                wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)
+            ]
+            kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+            kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+            kernel32.CloseHandle.restype = wintypes.BOOL
+
+            hwnd = user32.GetForegroundWindow()
+            if not hwnd:
+                return "", ""
+
+            length = user32.GetWindowTextLengthW(hwnd)
+            title = ""
+            if length > 0:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                title = buf.value.strip()
+
+            pid = wintypes.DWORD(0)
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            proc_name = ""
+            if pid.value:
+                PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                handle = kernel32.OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value
+                )
+                if handle:
+                    try:
+                        size = wintypes.DWORD(512)
+                        path_buf = ctypes.create_unicode_buffer(size.value)
+                        if kernel32.QueryFullProcessImageNameW(
+                            handle, 0, path_buf, ctypes.byref(size)
+                        ):
+                            proc_name = os.path.basename(path_buf.value)
+                    finally:
+                        kernel32.CloseHandle(handle)
+            return proc_name, title
+        except Exception:
+            return "", ""
+
+    if IS_MACOS:
+        try:
+            script = (
+                'tell application "System Events"\n'
+                '  set frontApp to first application process whose frontmost is true\n'
+                '  set appName to name of frontApp\n'
+                '  set winTitle to ""\n'
+                '  try\n'
+                '    set winTitle to name of front window of frontApp\n'
+                '  end try\n'
+                '  return appName & "\t" & winTitle\n'
+                'end tell'
+            )
+            raw = _run_tool(["osascript", "-e", script])
+            if raw:
+                parts = raw.decode("utf-8", errors="replace").strip().split("\t", 1)
+                return parts[0].strip(), (parts[1].strip() if len(parts) > 1 else "")
+        except Exception:
+            pass
+        return "", ""
+
+    if IS_LINUX:
+        try:
+            if shutil.which("xdotool"):
+                wid_raw = _run_tool(["xdotool", "getactivewindow"])
+                if wid_raw:
+                    wid = wid_raw.decode("utf-8", errors="replace").strip()
+                    title_raw = _run_tool(["xdotool", "getwindowname", wid])
+                    title = title_raw.decode("utf-8", errors="replace").strip() if title_raw else ""
+                    pid_raw = _run_tool(["xdotool", "getwindowpid", wid])
+                    proc = ""
+                    if pid_raw:
+                        pid_s = pid_raw.decode("utf-8", errors="replace").strip()
+                        comm = f"/proc/{pid_s}/comm"
+                        if os.path.exists(comm):
+                            with open(comm, encoding="utf-8", errors="replace") as fh:
+                                proc = fh.read().strip()
+                    return proc, title
+        except Exception:
+            pass
+        return "", ""
+
+    return "", ""
+
 
 
 

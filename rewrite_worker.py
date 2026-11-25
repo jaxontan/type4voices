@@ -57,10 +57,18 @@ def main(argv: list[str] | None = None) -> int:
             continue
         try:
             req = json.loads(line)
-            text = r.generate(
-                req["text"], req.get("accent", ""), req.get("terms") or [],
-                req.get("alternative", ""), req.get("recent", ""),
-            )
+            if req.get("mode") == "edit":
+                text = r.generate_edit(
+                    req["selected"],
+                    req["instruction"],
+                    req.get("terms") or [],
+                )
+            else:
+                text = r.generate(
+                    req["text"], req.get("accent", ""), req.get("terms") or [],
+                    req.get("alternative", ""), req.get("recent", ""),
+                    req.get("style_hint", ""),
+                )
             _send(out, {"text": text})
         except Exception as exc:  # keep serving; the app pastes the raw text
             logging.exception("generate failed")

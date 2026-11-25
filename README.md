@@ -239,6 +239,10 @@ safe; restart to apply.
 | `rewrite_enabled` | `true` | Rewrites the transcript into clean English with a local LLM. Tray → Fix my English. |
 | `rewrite_model` | `Qwen/Qwen3-1.7B` | The English-fixer model. Tray → English fixer model. See [the comparison](#model-comparison). |
 | `rewrite_worker_python` | `""` | Python for transformers-5 models such as Gemma 4. Empty = `.venv-t5` next to `dictate.py`. |
+| `rewrite_api_base` | `""` | Optional OpenAI-compatible server base URL (e.g. local `llama-server`, Ollama `http://127.0.0.1:11434/v1`, or a LAN GPU server). Falls back to the local model when unreachable. |
+| `rewrite_api_model` | `""` | Optional model name override for `rewrite_api_base` (defaults to `rewrite_model`). |
+| `rewrite_api_key` | `""` | Optional bearer token for `rewrite_api_base`. |
+| `context_awareness` | `true` | Reads the active window title/app (<1 ms, local-only) to bias hotwords and adapt style per app; skips password/banking windows. Tray → App context awareness. |
 | `second_hearing` | `true` | Transcribes each clip twice in one GPU call (with and without the accent prompt) and gives the fixer both. |
 | `auto_gain` | `true` | Boosts quiet speech (capped at 20x) before transcription. |
 | `trim_silence` | `true` | Trims lead-in and tail silence before transcription. |
@@ -485,16 +489,18 @@ shortcuts.py               parse, validate, display and match shortcuts
 platform_support.py        per-OS paste chord, clipboard, panel, autostart
 overlay.py                 mini panel: transcript, clipboard, shortcut recorder
 text_cleanup.py            deterministic number/punctuation/filler cleanup
-rewrite.py                 English fixer: prompt, guardrails, corrections
+context_awareness.py       active-window app category, dynamic hotwords & privacy guard
+rewrite.py                 English fixer: prompt, guardrails, corrections, OpenAI backend
 rewrite_worker.py          runs a transformers-5 fixer (Gemma 4) in .venv-t5
 requirements-t5.txt        packages for .venv-t5
 eval_rewrite.py            scores fixer models on 28 weak-English cases
 test_dictate.py            tests for settings, shortcuts, audio helpers
-test_text_cleanup.py       tests for the cleanup pipeline (63 cases)
+test_text_cleanup.py       tests for the cleanup pipeline (66 cases)
 test_rewrite.py            tests for the fixer's guardrails and corrections
+test_context_awareness.py  tests for window context, privacy guard & OpenAI rewriter
 test_mic.py                manual microphone and model diagnostic
 download_model.py          one-time model download (network allowed here)
-landing.html               single-file page, open in any browser
+landing_page/index.html    project landing page, open in any browser
 config.json                created on first run
 hotwords.txt               optional domain words
 corrections.txt            fixed "heard => meant" replacements
@@ -536,7 +542,7 @@ is on, and the watcher adds it to the left-click history.
 ## Tests
 
 ```
-.venv\Scripts\python.exe -m unittest -v test_dictate test_rewrite
+.venv\Scripts\python.exe -m unittest -v test_dictate test_rewrite test_context_awareness
 .venv\Scripts\python.exe test_text_cleanup.py
 .venv\Scripts\python.exe eval_rewrite.py --model Qwen/Qwen3-1.7B   # needs the model, ~1 min
 .venv\Scripts\python.exe dictate.py --doctor
