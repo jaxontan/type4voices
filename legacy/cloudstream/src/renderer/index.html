@@ -1,0 +1,197 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'"
+    />
+    <title>cloudstream</title>
+    <style>
+      :root {
+        --bg: #0e1116;
+        --panel: #151a21;
+        --line: #232b36;
+        --text: #e6edf5;
+        --dim: #8b98a8;
+        --accent: #6ee7b7;
+        --warn: #fbbf24;
+        --bad: #fca5a5;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 18px 22px 40px;
+      }
+      h1 { font-size: 15px; margin: 0 0 2px; letter-spacing: 0.02em; }
+      h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--dim);
+        margin: 22px 0 8px;
+      }
+      .lede { color: var(--dim); margin: 0 0 4px; }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+      .row { display: flex; gap: 12px; align-items: center; }
+      .row + .row { margin-top: 8px; }
+      .grow { flex: 1; }
+      label.field { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+      label.field span { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+      input[type="text"], input[type="password"], input[type="number"], textarea, select {
+        background: #0c1015;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--text);
+        padding: 6px 8px;
+        font: inherit;
+        width: 100%;
+      }
+      textarea { resize: vertical; min-height: 74px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+      input[type="checkbox"] { accent-color: var(--accent); }
+      .provider {
+        display: grid;
+        grid-template-columns: 24px 64px 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 9px 0;
+        border-top: 1px solid var(--line);
+      }
+      .provider:first-child { border-top: none; }
+      .provider .name { font-weight: 600; }
+      .provider .note { color: var(--dim); font-size: 12px; margin-top: 2px; }
+      .badge {
+        display: inline-block;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        padding: 1px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        color: var(--dim);
+        margin-left: 6px;
+        vertical-align: 1px;
+      }
+      .badge.official { color: var(--accent); border-color: #1d4d3d; }
+      .badge.unofficial { color: var(--warn); border-color: #4a3a13; }
+      button {
+        background: #1b2430;
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 6px 12px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover { border-color: #33414f; }
+      button.primary { background: #17453a; border-color: #1f6b56; color: #d7fbec; }
+      #status { color: var(--dim); font-size: 12px; margin-left: 8px; }
+      #status.bad { color: var(--bad); }
+      #status.good { color: var(--accent); }
+      #history { max-height: 190px; overflow: auto; font-size: 12px; }
+      #history .item { padding: 6px 0; border-top: 1px solid var(--line); }
+      #history .item:first-child { border-top: none; }
+      #history .meta { color: var(--dim); font-size: 11px; }
+      .hint { color: var(--dim); font-size: 11.5px; margin-top: 6px; }
+      kbd {
+        background: #0c1015;
+        border: 1px solid var(--line);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 0 4px;
+        font-family: ui-monospace, Consolas, monospace;
+        font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>cloudstream</h1>
+    <p class="lede">
+      Push-to-talk dictation. Your audio goes to a provider you chose, with your credentials, from this machine.
+      Nothing is sent to us — there is no us.
+    </p>
+
+    <h2>Providers, in fallback order</h2>
+    <div class="panel" id="providers"></div>
+    <p class="hint">
+      Priority 1 is tried first. If it fails mid-sentence, the same buffered audio is replayed into the next one.
+      Nothing is ever re-recorded.
+    </p>
+
+    <h2>Voice</h2>
+    <div class="panel">
+      <div class="row">
+        <label class="field"><span>Start / stop</span><input type="text" id="hotkey" /></label>
+        <label class="field"><span>Cancel</span><input type="text" id="cancelHotkey" /></label>
+      </div>
+      <div class="row">
+        <label class="field"><span>Silence timeout (ms)</span><input type="number" id="silenceMs" min="1000" step="500" /></label>
+        <label class="field"><span>Max utterance (ms)</span><input type="number" id="maxUtteranceMs" min="5000" step="5000" /></label>
+        <label class="field"><span>Language</span><input type="text" id="language" /></label>
+      </div>
+      <div class="row">
+        <label class="field"><span>Delivery</span>
+          <select id="injectMode">
+            <option value="paste">Paste into focused app</option>
+            <option value="clipboard-only">Clipboard only</option>
+          </select>
+        </label>
+        <label class="field"><span>&nbsp;</span>
+          <label class="row" style="gap: 8px">
+            <input type="checkbox" id="cleanupPass" />
+            <span style="color: var(--text); text-transform: none; letter-spacing: 0">Second cleanup pass</span>
+          </label>
+        </label>
+        <label class="field"><span>&nbsp;</span>
+          <label class="row" style="gap: 8px">
+            <input type="checkbox" id="autoRefreshClaudeToken" />
+            <span style="color: var(--text); text-transform: none; letter-spacing: 0">Auto-refresh Claude login</span>
+          </label>
+          <p class="hint" style="margin-top: 4px">Exchanges the refresh token your Claude Code client stored, and writes the new one back. Local only.</p>
+        </label>
+      </div>
+      <div class="row">
+        <label class="field">
+          <span>Gemini API key (Transcribe Live)</span>
+          <input type="password" id="geminiApiKey" placeholder="Paste Gemini API key (or set GEMINI_API_KEY)" autocomplete="off" />
+          <p class="hint" style="margin-top: 4px">Stored locally in your userData settings.json. Never sent anywhere except Google's Gemini Live endpoint.</p>
+        </label>
+      </div>
+    </div>
+
+    <h2>Your vocabulary</h2>
+    <div class="panel">
+      <textarea id="glossary" placeholder="useState&#10;pgvector&#10;kubectl&#10;Wanjiru&#10;cloudstream"></textarea>
+      <p class="hint">
+        One term per line. Identifiers, brand names, people. Providers that support biasing get it up front;
+        the rest get a fuzzy correction pass, which is most of what makes code dictation usable.
+      </p>
+    </div>
+
+    <div class="row" style="margin-top: 18px">
+      <button class="primary" id="save">Save</button>
+      <button id="probe">Probe provider quota</button>
+      <span id="status"></span>
+    </div>
+
+    <h2>Recent transcripts</h2>
+    <div class="panel" id="history"></div>
+
+    <p class="hint" style="margin-top: 18px">
+      <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> to dictate · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> to cancel ·
+      <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>,</kbd> for this window
+    </p>
+
+    <script src="./settings.js"></script>
+  </body>
+</html>

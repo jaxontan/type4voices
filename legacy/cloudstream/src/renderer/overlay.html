@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' blob:; worker-src 'self' blob:; style-src 'unsafe-inline'; media-src 'self'"
+    />
+    <title>cloudstream overlay</title>
+    <style>
+      :root {
+        --bg: rgba(16, 18, 22, 0.92);
+        --dim: rgba(226, 232, 240, 0.45);
+        --hot: #e2e8f0;
+        --bad: #fca5a5;
+        --accent: #6ee7b7;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: transparent;
+        font-family: "Segoe UI", system-ui, sans-serif;
+        color: var(--hot);
+        overflow: hidden;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      #card {
+        height: 100%;
+        margin: 8px;
+        border-radius: 14px;
+        background: var(--bg);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      #head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--dim);
+      }
+      #dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--bad);
+        box-shadow: 0 0 0 0 rgba(252, 165, 165, 0.6);
+        animation: pulse 1.4s infinite;
+      }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(252, 165, 165, 0.5); }
+        70% { box-shadow: 0 0 0 8px rgba(252, 165, 165, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(252, 165, 165, 0); }
+      }
+      #text {
+        flex: 1;
+        font-size: 16px;
+        line-height: 1.4;
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        color: var(--dim);
+        transition: color 120ms ease;
+      }
+      #text.final { color: var(--hot); }
+      #text.error { color: var(--bad); }
+      #meter {
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      #level {
+        height: 100%;
+        width: 0%;
+        background: var(--accent);
+        transition: width 60ms linear;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="card">
+      <div id="head"><span id="dot"></span><span id="state">listening</span></div>
+      <div id="text"></div>
+      <div id="meter"><div id="level"></div></div>
+    </div>
+    <script src="./overlay.js"></script>
+  </body>
+</html>

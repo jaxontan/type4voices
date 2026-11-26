@@ -47,6 +47,16 @@ import rewrite
 from text_cleanup import postprocess_text
 from trigger import create_trigger
 
+try:  # optional speech engine: the local model works without it
+    import anthropic_stt
+except Exception:  # pragma: no cover - only on a broken install
+    anthropic_stt = None
+
+try:  # optional speech engine: needs an API key, not a login
+    import gemini_stt
+except Exception:  # pragma: no cover - only on a broken install
+    gemini_stt = None
+
 # The model is already cached locally. Force cache-only mode so startup and
 # transcription never make network requests (including update checks). Assign
 # directly instead of setdefault so an inherited "0" cannot re-enable network.
@@ -97,6 +107,29 @@ DEFAULTS: dict[str, Any] = {
     # the wrong language, so pinning "English" (or "Chinese") is safer if you
     # only ever dictate one language.
     "language": "Auto",
+    # Speech engine. "anthropic" streams the clip to the same endpoint Claude
+    # Code's /voice mode uses, on the Claude login you already have: no local
+    # ASR model in memory and nothing per-minute. "gemini" streams it to
+    # Google's Gemini 3.5 Transcribe Live over the public Live API, using an
+    # API key in gemini_api_key (free tier available). "local" keeps Qwen3-ASR
+    # on this machine. See anthropic_stt.py and gemini_stt.py.
+    "stt_engine": "gemini",
+    # API key for the Gemini speech engine (optional). Leave empty to disable.
+    "gemini_api_key": "",
+    # If the cloud engine cannot transcribe (expired login, bad key, offline,
+    # endpoint changed), use the local Qwen model for that clip instead of
+    # pasting nothing. The panel says so, and the sign-in card stays available.
+    "fallback_to_local": True,
+    # Advanced: the order speech providers are tried, one clip at a time.
+    # Empty means "stt_engine, then the local model when fallback_to_local".
+    # The whole clip is buffered and replayed into the next provider, so a dead
+    # socket costs latency, not the sentence (ported from cloudstream).
+    # Examples: ["gemini", "local"], ["anthropic", "gemini", "local"].
+    "stt_engine_order": [],
+    # Exchange the refresh token in ~/.claude/.credentials.json when the Claude
+    # login has expired, and write the rotated pair back so Claude Code itself
+    # stays signed in. Local only.
+    "auto_refresh_claude_token": True,
     # Optional sentence describing the speaker, sent to the model
     # together with the hotwords. Useful for a strong accent or
     # non-native grammar: it stops the model from tidying the words up.
@@ -263,6 +296,14 @@ def _coerce(key: str, value: Any) -> Any:
     if default is None:
         return value
     try:
+        if isinstance(default, list):
+            # A list setting (the provider chain) may arrive as a JSON array or
+            # as a comma-separated string; keep only the known engine ids.
+            if isinstance(value, str):
+                value = value.split(",")
+            if not isinstance(value, (list, tuple, set)):
+                return list(default)
+            return [str(item).strip().lower() for item in value if str(item).strip()]
         if isinstance(default, bool):
             if isinstance(value, str):
                 return value.strip().lower() in {"1", "true", "yes", "on"}
@@ -275,6 +316,45 @@ def _coerce(key: str, value: Any) -> Any:
     except (TypeError, ValueError):
         log.warning("invalid value for %s in config (%r); using default", key, value)
         return default
+
+
+ENGINE_IDS = ("anthropic", "gemini", "local")
+
+
+def resolve_engine_order(
+    engine: str | None,
+    order: object = None,
+    fallback_to_local: bool = True,
+) -> list[str]:
+    """Resolve the speech-provider chain for one clip.
+
+    An explicit ``stt_engine_order`` wins, so an advanced config can put, say,
+    Gemini first and Claude second. Otherwise the single ``stt_engine`` is the
+    head of the chain, and ``fallback_to_local`` appends the local model when
+    the head is a cloud engine. Unknown ids and duplicates are dropped; the
+    result is never empty.
+    """
+    chain: list[str] = []
+    if order:
+        items = order.split(",") if isinstance(order, str) else order
+        try:
+            iterator = list(items)  # type: ignore[arg-type]
+        except TypeError:
+            iterator = []
+        for item in iterator:
+            name = str(item).strip().lower()
+            if name in ENGINE_IDS and name not in chain:
+                chain.append(name)
+
+    if not chain:
+        name = str(engine or "local").strip().lower()
+        if name not in ENGINE_IDS:
+            name = "local"
+        chain.append(name)
+        if name in ("anthropic", "gemini") and fallback_to_local:
+            chain.append("local")
+
+    return chain or ["local"]
 
 
 def load_settings(path: str = CONFIG_PATH, write_if_missing: bool = True) -> Settings:
@@ -891,6 +971,29 @@ class DictationTray:
             ),
             pystray.MenuItem("Dictation language", pystray.Menu(*language_items)),
             pystray.MenuItem(
+                "Speech engine",
+                pystray.Menu(
+                    pystray.MenuItem(
+                        "Claude (online, your login)",
+                        self._engine_action("anthropic"),
+                        checked=lambda _item: self.app.uses_claude,
+                        radio=True,
+                    ),
+                    pystray.MenuItem(
+                        "Gemini Transcribe Live (API key)",
+                        self._engine_action("gemini"),
+                        checked=lambda _item: self.app.uses_gemini,
+                        radio=True,
+                    ),
+                    pystray.MenuItem(
+                        "Local Qwen3-ASR",
+                        self._engine_action("local"),
+                        checked=lambda _item: not self.app.uses_cloud,
+                        radio=True,
+                    ),
+                ),
+            ),
+            pystray.MenuItem(
                 "Clean up dictated text",
                 self._toggle_cleanup,
                 checked=lambda _item: self.app.cleanup_enabled,
@@ -940,7 +1043,11 @@ class DictationTray:
             ),
             pystray.MenuItem("Open Last Recording (WAV)", self._open_last_wav),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Reload model", self._reload_model),
+            pystray.MenuItem(
+                "Reload model",
+                self._reload_model,
+                enabled=lambda _item: self.app.uses_local,
+            ),
             pystray.MenuItem("Open log file", self._open_log),
             pystray.MenuItem(
                 platform_support.autostart_label(),
@@ -1047,6 +1154,9 @@ class DictationTray:
             for model_id, text in choices
         ]
 
+    def _engine_action(self, engine: str):
+        return lambda icon=None, item=None: self.app.set_stt_engine(engine)
+
     def _toggle_overlay(self, icon=None, item=None):
         self.app.set_overlay_enabled(not self.app.settings.overlay_enabled)
 
@@ -1129,6 +1239,10 @@ class VoiceDictationApp:
         self.running = True
         self.cleanup_enabled = bool(self.settings.cleanup_enabled)
         self.last_text = ""
+        # Why the speech engine produced nothing, when it was the engine and
+        # not the microphone. Keeps the useful message on screen.
+        self._stt_failure = ""
+        self._login_pending = False
         self.model_error: str | None = None
 
         self._model = None
@@ -1153,6 +1267,7 @@ class VoiceDictationApp:
         self._record_started_at = 0.0
         self._stream_error = False
         self._last_status_log = 0.0
+        self._last_level_at = 0.0
         self._opening_stream = False
         self._busy = False
 
@@ -1207,12 +1322,82 @@ class VoiceDictationApp:
     def _idle_tooltip(self) -> str:
         return f"Hold {self.shortcut.display()} to dictate"
 
+    def _engine_order(self) -> list[str]:
+        """The providers to try for one clip, in order."""
+        return resolve_engine_order(
+            getattr(self.settings, "stt_engine", "local"),
+            getattr(self.settings, "stt_engine_order", []),
+            self.fallback_to_local,
+        )
+
+    def _in_chain(self, engine: str) -> bool:
+        """True when ``engine`` is anywhere in the chain, not only first."""
+        return engine in self._engine_order()
+
+    @property
+    def primary_engine(self) -> str:
+        """The engine the tray radio reflects: the first in the chain."""
+        return self._engine_order()[0]
+
+    @property
+    def uses_claude(self) -> bool:
+        """True when Claude is the primary engine (drives the tray check)."""
+        return self.primary_engine == "anthropic" and anthropic_stt is not None
+
+    @property
+    def uses_gemini(self) -> bool:
+        """True when Gemini is the primary engine (drives the tray check)."""
+        return self.primary_engine == "gemini" and gemini_stt is not None
+
+    @property
+    def uses_local(self) -> bool:
+        """True when the local model is anywhere in the chain, primary or fallback."""
+        return "local" in self._engine_order()
+
+    @property
+    def local_primary(self) -> bool:
+        """True when the local model transcribes first, so it must be warmed."""
+        return self.primary_engine == "local"
+
+    @property
+    def uses_cloud(self) -> bool:
+        """True when a cloud engine heads the chain."""
+        return self.primary_engine in ("anthropic", "gemini")
+
+    def set_stt_engine(self, engine: str) -> None:
+        engine = str(engine).lower()
+        if engine not in ("anthropic", "gemini", "local"):
+            engine = "local"
+        if engine == "anthropic" and anthropic_stt is None:
+            log.error("the Claude speech engine is unavailable (websocket-client missing)")
+            self._notify_panel("Claude speech is not available - check the log")
+            return
+        if engine == "gemini" and gemini_stt is None:
+            log.error("the Gemini speech engine is unavailable (websocket-client missing)")
+            self._notify_panel("Gemini speech is not available - check the log")
+            return
+        self.settings.set("stt_engine", engine)
+        # A hand-edited provider chain would keep the tray radio from being
+        # what actually runs, so choosing an engine here resets it to simple.
+        if getattr(self.settings, "stt_engine_order", None):
+            self.settings.set("stt_engine_order", [])
+        if engine == "anthropic":
+            log.info("speech engine: Claude (Anthropic); local ASR model unused")
+            self._notify_panel("Speech: Claude (online)")
+        elif engine == "gemini":
+            log.info("speech engine: Gemini Transcribe Live (API key); local ASR model unused")
+            self._notify_panel("Speech: Gemini (online)")
+        else:
+            log.info("speech engine: local model")
+            self._notify_panel("Speech: local model")
+        self.refresh_state()
+
     def refresh_state(self, busy: bool | None = None) -> None:
         if not self.running:
             return
         if busy is not None:
             self._busy = busy
-        if self.model_error:
+        if self.model_error and self.local_primary:
             state, tooltip = "error", "Model failed - open log"
         elif self._busy:
             state, tooltip = "transcribing", "Transcribing..."
@@ -1220,7 +1405,7 @@ class VoiceDictationApp:
             state, tooltip = "paused", "Dictation paused"
         elif self._recording:
             state, tooltip = "recording", "Recording speech..."
-        elif self._model is None:
+        elif self._model is None and self.local_primary:
             state, tooltip = "loading", "Loading model..."
         else:
             state, tooltip = "idle", self._idle_tooltip()
@@ -1255,6 +1440,91 @@ class VoiceDictationApp:
             overlay.notify(message)
         except Exception:
             log.debug("could not show a panel notice", exc_info=True)
+
+    def offer_claude_login(self, reason: str = "") -> None:
+        """Offer the sign-in in the panel instead of a terminal command.
+
+        The panel never takes keyboard focus, so this cannot pull the user out
+        of the window they are typing in; clicking it starts Claude Code's own
+        browser login.
+        """
+        if not self._in_chain("anthropic") or anthropic_stt is None:
+            return
+        if self.overlay is None and self.settings.overlay_enabled:
+            self.set_overlay_enabled(True)
+        overlay = self.overlay
+        if overlay is None:
+            self._notify_panel(reason or "Claude login needed - run `claude auth login`")
+            return
+        try:
+            overlay.on_login = self.start_claude_login
+            overlay.show_login(reason or "Your Claude login expired.")
+        except Exception:
+            log.debug("could not show the login prompt", exc_info=True)
+
+    def start_claude_login(self) -> None:
+        """Spawn `claude auth login` (browser only, no console) and watch it."""
+        if anthropic_stt is None or self._login_pending:
+            return
+        if not anthropic_stt.start_login():
+            log.warning("could not start the Claude login")
+            self._notify_panel("Could not start the login - run `claude auth login`")
+            return
+        self._login_pending = True
+        log.info("Claude login started; waiting for the browser")
+        if self.overlay is not None:
+            try:
+                self.overlay.update_login("Waiting for the browser to finish…")
+            except Exception:
+                pass
+        threading.Thread(
+            target=self._watch_claude_login, daemon=True, name="claude-login"
+        ).start()
+
+    def _watch_claude_login(self) -> None:
+        ok = False
+        try:
+            ok = anthropic_stt.wait_for_login(timeout=300.0)
+        except Exception:
+            log.debug("watching the Claude login failed", exc_info=True)
+        finally:
+            self._login_pending = False
+        overlay = self.overlay
+        if ok:
+            log.info("Claude login restored")
+            if overlay is not None:
+                try:
+                    overlay.hide_login()
+                except Exception:
+                    pass
+            self._notify_panel("Claude login restored")
+        else:
+            log.info("Claude login was not completed")
+            if overlay is not None:
+                try:
+                    overlay.update_login("Not signed in yet - click to try again")
+                except Exception:
+                    pass
+
+    def _warm_local_model(self) -> None:
+        """Load the local ASR model in the background, once, if it is not up."""
+        if self._model is not None or self.model_error is not None:
+            return
+        threading.Thread(
+            target=self.load_model, daemon=True, name="model-load"
+        ).start()
+
+    def _check_claude_login(self) -> None:
+        """At startup, say so before the first dictation fails."""
+        if anthropic_stt is None or not self._in_chain("anthropic"):
+            return
+        if anthropic_stt.is_logged_in() is False:
+            log.info("Claude login is missing or expired; offering sign-in")
+            if self.uses_local and self._model is None and self.model_error is None:
+                # Warm the local model now, so the first fallback clip is not a
+                # 45-second wait while the user is looking at a stuck panel.
+                self._warm_local_model()
+            self.offer_claude_login("Your Claude login expired.")
 
     def show_clipboard_history(self) -> None:
         """Left-clicking the tray icon shows the recent clipboard items."""
@@ -1317,6 +1587,7 @@ class VoiceDictationApp:
                 from overlay import TranscriptOverlay
 
                 self.overlay = TranscriptOverlay(self.settings, log=log)
+                self.overlay.on_login = self.start_claude_login
                 self.overlay.start()
                 log.info("transcript panel enabled")
             except Exception:
@@ -1831,6 +2102,192 @@ class VoiceDictationApp:
             log.debug("hotwords in use: %s", ", ".join(terms))
         return context
 
+    @property
+    def fallback_to_local(self) -> bool:
+        return bool(getattr(self.settings, "fallback_to_local", True))
+
+    def _local_transcribe(self, audio, app_context=None) -> str:
+        # Load outside the timer so the logged latency is inference only, not a
+        # cold model load.
+        if self._model is None and self.model_error is None:
+            self.load_model()
+        return normalize_transcript(self.transcribe(audio, app_context))
+
+    def transcribe_with_engine(self, audio, app_context=None) -> str:
+        """Run one clip through the provider chain, replaying it on failure.
+
+        Ported from cloudstream's ``DictationSession``: the whole clip is
+        already buffered, so a provider that dies halfway costs latency, not
+        the sentence — the identical audio is replayed into the next provider.
+        A provider that returns text ends the clip. A provider that returns an
+        empty result *without* an error is real silence, and stops the chain.
+        """
+        self._stt_failure = ""
+        order = self._engine_order()
+        tried: list[str] = []
+        last_label = ""
+        last_error = ""
+
+        for engine in order:
+            if engine in tried:
+                continue
+            tried.append(engine)
+
+            if engine == "local":
+                text = self._local_transcribe(audio, app_context)
+                if text:
+                    if last_label:
+                        self._notify_panel(
+                            f"{last_label} unavailable - used the local model"
+                        )
+                    self._stt_failure = ""
+                    return text
+                if self._model is None:
+                    # Not loaded (missing weights or a failed load) is a
+                    # failure, not silence, so the rest of the chain still runs.
+                    last_error = self.model_error or "the local model is not available"
+                    last_label = "Local model"
+                    log.warning("%s; trying the next engine", last_error)
+                    continue
+                if not last_error:
+                    return ""
+                continue
+
+            if engine == "gemini":
+                if gemini_stt is None:
+                    last_error = "Gemini speech is not available - check the log"
+                    last_label = "Gemini"
+                    continue
+                label = "Gemini"
+                self._stt_failure = ""
+                text = normalize_transcript(
+                    self.transcribe_gemini(audio, app_context)
+                )
+            else:  # anthropic
+                if anthropic_stt is None:
+                    last_error = "Claude speech is not available - check the log"
+                    last_label = "Claude"
+                    continue
+                label = "Claude"
+                self._stt_failure = ""
+                text = normalize_transcript(
+                    self.transcribe_claude(audio, app_context)
+                )
+
+            if text:
+                return text
+
+            error = self._stt_failure
+            if not error:
+                # The provider answered, and the answer was emptiness: the
+                # user said nothing, so replaying the clip cannot help.
+                return ""
+            last_error = error
+            last_label = label
+            log.warning(
+                "%s speech unavailable (%s); trying the next engine", label, error
+            )
+
+        self._stt_failure = last_error
+        return ""
+
+    def transcribe_claude(
+        self,
+        audio: np.ndarray,
+        app_context: context_awareness.AppContext | None = None,
+    ) -> str:
+        """Transcribe one clip on Anthropic's stream, with the user's login.
+
+        Same account and endpoint Claude Code's /voice uses; the recording is
+        uploaded there and to nothing else. Vocabulary biasing goes as
+        keyterms, which is the nearest thing this endpoint has to hotwords.
+        """
+        if anthropic_stt is None:
+            self._stt_failure = "Claude speech is not available - check the log"
+            self._notify_panel(self._stt_failure)
+            return ""
+        keyterms: list[str] = []
+        if getattr(self.settings, "use_hotwords", True):
+            terms = self._hotword_terms()
+            if app_context is not None and not app_context.sensitive:
+                terms = context_awareness.merge_hotwords(
+                    terms, app_context.dynamic_terms
+                )
+            keyterms = [term for term in terms if term]
+        try:
+            return anthropic_stt.transcribe(
+                audio,
+                int(self.settings.sample_rate),
+                anthropic_stt.code_for_language(self.settings.language),
+                keyterms,
+                auto_refresh=bool(
+                    getattr(self.settings, "auto_refresh_claude_token", True)
+                ),
+            )
+        except anthropic_stt.SttError as exc:
+            log.error("Claude speech failed: %s", exc)
+            self._stt_failure = str(exc)
+            lowered = self._stt_failure.lower()
+            if any(word in lowered for word in ("login", "sign in", "revoked")):
+                # A dead login is fixed by signing in, not by retrying speech.
+                self.offer_claude_login("Your Claude login expired.")
+            else:
+                self._notify_panel(self._stt_failure)
+            return ""
+        except Exception:
+            log.exception("Claude speech failed")
+            self._stt_failure = "Claude speech failed - see the log"
+            self._notify_panel(self._stt_failure)
+            return ""
+
+    def transcribe_gemini(
+        self,
+        audio: np.ndarray,
+        app_context: context_awareness.AppContext | None = None,
+    ) -> str:
+        """Transcribe one clip on Google's Gemini 3.5 Transcribe Live endpoint.
+
+        Uses an API key from config.json (gemini_api_key) or GEMINI_API_KEY.
+        Hotwords go in as custom vocabulary, which is the nearest thing this
+        endpoint has to biasing. Auto language detection is used unless a
+        language is pinned in the tray.
+        """
+        if gemini_stt is None:
+            self._stt_failure = "Gemini speech is not available - check the log"
+            self._notify_panel(self._stt_failure)
+            return ""
+        key = gemini_stt.api_key(getattr(self.settings, "gemini_api_key", ""))
+        if not key:
+            self._stt_failure = "No Gemini API key - add gemini_api_key to config.json"
+            self._notify_panel(self._stt_failure)
+            return ""
+        keyterms: list[str] = []
+        if getattr(self.settings, "use_hotwords", True):
+            terms = self._hotword_terms()
+            if app_context is not None and not app_context.sensitive:
+                terms = context_awareness.merge_hotwords(
+                    terms, app_context.dynamic_terms
+                )
+            keyterms = [term for term in terms if term][:100]
+        try:
+            return gemini_stt.transcribe(
+                audio,
+                int(self.settings.sample_rate),
+                gemini_stt.code_for_language(self.settings.language),
+                keyterms,
+                api_key_value=key,
+            )
+        except gemini_stt.SttError as exc:
+            log.error("Gemini speech failed: %s", exc)
+            self._stt_failure = str(exc)
+            self._notify_panel(self._stt_failure)
+            return ""
+        except Exception:
+            log.exception("Gemini speech failed")
+            self._stt_failure = "Gemini speech failed - see the log"
+            self._notify_panel(self._stt_failure)
+            return ""
+
     def transcribe(
         self,
         audio: np.ndarray,
@@ -1959,6 +2416,14 @@ class VoiceDictationApp:
             with self._rec_lock:
                 if self._recording:
                     self._frames.append(indata.copy())
+            # Feed the panel's level meter from the same block, about 15 times
+            # a second rather than once per 64 ms block.
+            panel = self.overlay
+            now = time.time()
+            if panel is not None and now - self._last_level_at > 0.06:
+                self._last_level_at = now
+                level = np.sqrt(np.mean(np.square(indata, dtype=np.float64)))
+                panel.set_level(float(level))
         except Exception:
             log.exception("audio callback failed")
 
@@ -2157,12 +2622,8 @@ class VoiceDictationApp:
                         log.warning("could not save %s: %s", TMP_WAV, exc)
 
                 log.info("transcribing %s of audio ...", format_duration(seconds))
-                # Load outside the timer so the logged latency is inference
-                # only, not a cold model load.
-                if self._model is None and self.model_error is None:
-                    self.load_model()
                 started = time.time()
-                raw_text = normalize_transcript(self.transcribe(audio, app_context))
+                raw_text = self.transcribe_with_engine(audio, app_context)
                 text = postprocess_text(raw_text) if self.cleanup_enabled else raw_text
                 elapsed = time.time() - started
 
@@ -2171,7 +2632,9 @@ class VoiceDictationApp:
                 log.info("transcribed in %.2fs: %r", elapsed, text)
 
                 if text and is_pasteable(text):
-                    alternative = self._last_alternative
+                    # Only the local model produces a second hearing; a stale
+                    # one from before an engine switch must not be reused.
+                    alternative = self._last_alternative if self.uses_local else ""
                     if alternative and alternative != raw_text:
                         log.info("second hearing: %r", alternative)
                     text = self.apply_corrections(text)
@@ -2196,9 +2659,14 @@ class VoiceDictationApp:
                     self._add_overlay_entry(text)
                     self.paste_text(text)
                 elif not text:
-                    log.info("no speech detected")
-                    if not dropped:
-                        self._notify_panel("Heard nothing. Check the microphone")
+                    if self._stt_failure:
+                        # The engine already said what went wrong; do not replace
+                        # "the login was rejected" with "check your microphone".
+                        log.warning("no transcript: %s", self._stt_failure)
+                    else:
+                        log.info("no speech detected")
+                        if not dropped:
+                            self._notify_panel("Heard nothing. Check the microphone")
             except Exception:
                 log.exception("transcription failed")
             finally:
@@ -2301,7 +2769,12 @@ class VoiceDictationApp:
     def start(self) -> None:
         log.info("=" * 62)
         log.info("%s %s", APP_NAME, VERSION)
-        log.info("model      : %s", self.settings.model_id)
+        log.info(
+            "model      : %s",
+            f"{self.settings.model_id} (not loaded)"
+            if self.uses_cloud
+            else self.settings.model_id,
+        )
         log.info("language   : %s", self.settings.language)
         log.info("trigger    : %s (%s)", self.shortcut.display(), self.shortcut.canonical())
         log.info("platform   : %s", platform_support.SYSTEM)
@@ -2312,6 +2785,10 @@ class VoiceDictationApp:
             self.settings.rewrite_model if self.settings.rewrite_enabled else "off",
         )
         log.info("min/max    : %.1fs / %.0fs", self.settings.min_seconds, self.settings.max_seconds)
+        log.info(
+            "speech     : %s",
+            " -> ".join(self._engine_order()),
+        )
         log.info("panel      : %s", "on" if self.overlay is not None else "off")
         log.info("clipboard  : auto=%s history=%d", "on" if self.settings.auto_clipboard else "off", self.clipboard_history.limit)
         log.info("=" * 62)
@@ -2326,6 +2803,21 @@ class VoiceDictationApp:
                 log.exception("could not start the transcript panel")
                 self.overlay = None
 
+        if self.overlay is not None:
+            self.overlay.on_login = self.start_claude_login
+        if self._in_chain("anthropic"):
+            threading.Thread(
+                target=self._check_claude_login, daemon=True, name="claude-auth"
+            ).start()
+        if self._in_chain("gemini"):
+            if not gemini_stt.api_key(getattr(self.settings, "gemini_api_key", "")):
+                log.warning("Gemini API key is missing; add gemini_api_key to config.json")
+                self._notify_panel("Gemini API key missing - add it to config.json")
+                if self.uses_local:
+                    # Warm the safety net now, so the first fallback clip is not
+                    # a 45-second wait while the user stares at a stuck panel.
+                    self._warm_local_model()
+
         if not self._open_audio_stream():
             log.warning("microphone not available yet; will retry on first press")
 
@@ -2334,7 +2826,14 @@ class VoiceDictationApp:
         )
         self._worker.start()
         threading.Thread(target=self._watchdog, daemon=True, name="watchdog").start()
-        threading.Thread(target=self.load_model, daemon=True, name="model-load").start()
+        if self.local_primary:
+            self._warm_local_model()
+        elif self.uses_local:
+            # A cloud engine transcribes first; the local model is the safety
+            # net and loads on the first clip the cloud cannot finish.
+            log.info("cloud engine primary; local model is a lazy fallback")
+        else:
+            log.info("local speech model not loaded (cloud-only chain)")
         threading.Thread(
             target=self._clipboard_watcher, daemon=True, name="clipboard-watch"
         ).start()

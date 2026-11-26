@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Voice Dictation (Local Qwen3-ASR)
+title Voice Dictation
 cd /d "%~dp0.."
 
 set "APP_DIR=%CD%"

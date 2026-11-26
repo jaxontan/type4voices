@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import ctypes
 import gc
+import math
 import queue
 import threading
 import time
@@ -25,25 +26,49 @@ import tkinter as tk
 
 import platform_support
 
-# Theme
-BG = "#1b1e25"
-BG_ENTRY = "#22262f"
-BORDER = "#3a404c"
-TEXT = "#e9ecf1"
-MUTED = "#98a1b0"
+# Theme: cloudstream's HUD (dark card, one dim/bright text ramp, one accent)
+# wearing this app's own identity, the two-lamp traffic light from the tray.
+BG = "#101216"          # card
+BG_ENTRY = "#151a21"    # raised row / latest transcript
+BORDER = "#232b36"
+TEXT = "#e2e8f0"        # a finished transcript
+DIM_TEXT = "#79828f"    # waiting, interim, or a notice
+MUTED = "#8b98a8"       # labels, timestamps
+ACCENT = "#6ee7b7"      # the level meter
+BAD = "#fca5a5"
+
+# The tray icon's lamps, unchanged, so panel and tray are the same object.
 RED = "#ec3e36"
 GREEN = "#34cc60"
+DARK_RED = "#4a1412"
+DARK_GREEN = "#0f2e1a"
+HOUSING = "#22252a"
+RIM = "#0a0b0d"
 
 FONT = platform_support.ui_font()
 
-STATE_DOT = {
-    "loading": RED,
-    "idle": RED,
-    "recording": GREEN,
-    "transcribing": GREEN,
-    "paused": MUTED,
-    "error": RED,
+STATE_LABEL = {
+    "loading": "loading model",
+    "idle": "idle",
+    "recording": "recording",
+    "transcribing": "transcribing",
+    "paused": "paused",
+    "error": "error",
 }
+
+STATE_LAMPS = {
+    "loading": "red",
+    "idle": "red",
+    "recording": "green",
+    "transcribing": "green",
+    "paused": None,
+    "error": "red",
+}
+
+
+def _caps(text: str) -> str:
+    """Letterspaced capitals, the HUD's header style (a thin space, not a full one)."""
+    return "\u2009".join(str(text or "").upper())
 
 
 def format_elapsed(seconds: float) -> str:
@@ -58,6 +83,11 @@ def _one_line(text: str, limit: int = 58) -> str:
     if len(flat) <= limit:
         return flat
     return flat[: limit - 1].rstrip() + "…"
+
+
+def _clamped(text: str, limit: int = 160) -> str:
+    """Collapse to one paragraph, cut to about three lines in the card."""
+    return _one_line(text, limit)
 
 
 def clipboard_preview(text: str, limit: int = 150) -> str:
@@ -94,7 +124,12 @@ class TranscriptOverlay:
         self._timer_job = None
         self._visible = False
         self._container = None
-        self._status_label = None
+        self._state_label = None
+        self._timer_label = None
+        self._body_label = None
+        self._meter = None
+        self._meter_fill = None
+        self._level = 0.0
         self._hwnd = 0
 
         # "transcript", "clipboard" (left-click tray popup) or "capture"
@@ -109,6 +144,12 @@ class TranscriptOverlay:
         self._capture_done = False
         self._capture_ok = True
         self.on_capture_cancel = None
+
+        # Sign-in prompt (the Claude login lapsed). Clicking it hands off to
+        # the app, which starts Claude Code's own browser login.
+        self._login_text = ""
+        self._login_note = ""
+        self.on_login = None
 
         # Focus guard: remember the last real foreground window and never let
         # the panel keep it.
@@ -140,6 +181,10 @@ class TranscriptOverlay:
     def add_entry(self, text: str) -> None:
         self._queue.put(("entry", text, None))
 
+    def set_level(self, rms: float) -> None:
+        """Microphone RMS (0..1) from the audio callback, for the level meter."""
+        self._queue.put(("level", float(rms or 0.0), None))
+
     def notify(self, text: str, seconds: float = 5.0) -> None:
         """Show one line for a few seconds without adding it to the history."""
         self._queue.put(("notice", str(text or ""), float(seconds)))
@@ -157,6 +202,20 @@ class TranscriptOverlay:
     @property
     def clipboard_open(self) -> bool:
         return self._mode == "clipboard" and self._visible
+
+    def show_login(self, reason: str = "") -> None:
+        """Ask for a sign-in without taking focus from the user's window."""
+        self._queue.put(("login", reason, None))
+
+    def update_login(self, text: str) -> None:
+        self._queue.put(("login-update", text, None))
+
+    def hide_login(self) -> None:
+        self._queue.put(("login-close", None, None))
+
+    @property
+    def login_open(self) -> bool:
+        return self._mode == "login" and self._visible
 
     def show_capture(self, preview: str = "Waiting for a key, combination or click…") -> None:
         """Open the shortcut recorder view (tray → Set shortcut)."""
@@ -211,7 +270,11 @@ class TranscriptOverlay:
             # it, otherwise Tkinter prints "async handler deleted by the wrong
             # thread" as the process exits.
             self._container = None
-            self._status_label = None
+            self._state_label = None
+            self._timer_label = None
+            self._body_label = None
+            self._meter = None
+            self._meter_fill = None
             self._root = None
             try:
                 root.destroy()
@@ -250,9 +313,14 @@ class TranscriptOverlay:
             self._root.after(40, self._pump)
 
     def _handle(self, kind: str, value, extra) -> None:
-        if kind == "state":
+        if kind == "level":
+            self._set_level(float(value or 0.0))
+        elif kind == "state":
             self._mode = "transcript"
             self._flash = ""
+            if (value or "idle") != "recording":
+                # The meter only means anything while the mic is live.
+                self._level = 0.0
             self._state = value or "idle"
             self._started_at = extra or time.time()
             if self._state == "recording":
@@ -290,6 +358,7 @@ class TranscriptOverlay:
                 self._schedule_hide()
         elif kind == "notice":
             self._mode = "transcript"
+            self._level = 0.0
             self._stop_timer()
             self._cancel_hide()
             self._notice = str(value or "")
@@ -319,6 +388,26 @@ class TranscriptOverlay:
             self._build()
             self._place()
             self._schedule_hide(delay=max(15.0, self.hide_after))
+        elif kind == "login":
+            self._mode = "login"
+            self._login_text = str(value or "Your Claude login expired.")
+            self._login_note = ""
+            self._level = 0.0
+            self._stop_timer()
+            self._cancel_hide()
+            self._visible = True
+            self._build()
+            self._place()
+        elif kind == "login-update":
+            if self._mode != "login":
+                return
+            self._login_note = str(value or "")
+            self._build()
+            self._place()
+        elif kind == "login-close":
+            if self._mode == "login":
+                self._cancel_hide()
+                self._hide()
         elif kind == "capture":
             self._mode = "capture"
             self._capture_done = False
@@ -356,7 +445,11 @@ class TranscriptOverlay:
 
         if self._container is not None:
             self._container.destroy()
-        self._status_label = None
+        self._state_label = None
+        self._timer_label = None
+        self._body_label = None
+        self._meter = None
+        self._meter_fill = None
         self._container = tk.Frame(root, bg=BG)
         self._container.pack(fill="both", expand=True, padx=1, pady=1)
 
@@ -364,6 +457,8 @@ class TranscriptOverlay:
             self._build_clipboard()
         elif self._mode == "capture":
             self._build_capture()
+        elif self._mode == "login":
+            self._build_login()
         else:
             self._build_header()
             if self._expanded:
@@ -375,32 +470,108 @@ class TranscriptOverlay:
             widget.bind("<Button-3>", self._on_right_click)
 
     def _build_header(self) -> None:
-        row = tk.Frame(self._container, bg=BG, padx=10, pady=8)
-        row.pack(fill="x")
-        row.bind("<Button-1>", self._on_click)
-        row.bind("<Button-3>", self._on_right_click)
+        head = tk.Frame(self._container, bg=BG, padx=14)
+        head.pack(fill="x", pady=(11, 0))
+        head.bind("<Button-1>", self._on_click)
+        head.bind("<Button-3>", self._on_right_click)
 
-        dot = tk.Label(
-            row, text="●", bg=BG, fg=STATE_DOT.get(self._state, RED),
-            font=(FONT, 10),
+        lamps = tk.Canvas(
+            head, width=13, height=26, bg=BG, bd=0,
+            highlightthickness=0, takefocus=0,
         )
-        dot.pack(side="left")
-        dot.bind("<Button-1>", self._on_click)
+        lamps.pack(side="left")
+        self._draw_lamps(lamps)
+        lamps.bind("<Button-1>", self._on_click)
+        lamps.bind("<Button-3>", self._on_right_click)
 
         label = tk.Label(
-            row, text=self._status_text(), bg=BG, fg=TEXT,
-            font=(FONT, 10), anchor="w", justify="left",
+            head, text=_caps(STATE_LABEL.get(self._state, self._state)),
+            bg=BG, fg=MUTED, font=(FONT, 8), anchor="w",
         )
-        label.pack(side="left", padx=(8, 6), fill="x", expand=True)
+        label.pack(side="left", padx=(8, 0))
         label.bind("<Button-1>", self._on_click)
-        self._status_label = label
+        self._state_label = label
 
         chevron = tk.Label(
-            row, text="⌃" if self._expanded else "⌄", bg=BG, fg=MUTED,
-            font=(FONT, 10),
+            head, text="⌃" if self._expanded else "⌄", bg=BG, fg=MUTED,
+            font=(FONT, 9),
         )
         chevron.pack(side="right")
         chevron.bind("<Button-1>", self._on_click)
+
+        timer = tk.Label(
+            head, text=self._timer_text(), bg=BG, fg=MUTED,
+            font=(FONT, 8), anchor="e",
+        )
+        timer.pack(side="right", padx=(0, 8))
+        timer.bind("<Button-1>", self._on_click)
+        self._timer_label = timer
+
+        body = tk.Label(
+            self._container, text=self._status_text(), bg=BG,
+            fg=self._body_color(), font=(FONT, 12), anchor="w",
+            justify="left", wraplength=self.WIDTH - 28,
+        )
+        body.pack(fill="x", padx=14, pady=(7, 0))
+        body.bind("<Button-1>", self._on_click)
+        body.bind("<Button-3>", self._on_right_click)
+        self._body_label = body
+
+        meter = tk.Frame(self._container, bg=BG, padx=14)
+        meter.pack(fill="x", pady=(9, 11))
+        track = tk.Canvas(
+            meter, height=3, bg="#1b2027", bd=0,
+            highlightthickness=0, takefocus=0,
+        )
+        track.pack(fill="x")
+        fill = track.create_rectangle(0, 0, 0, 3, fill=ACCENT, width=0)
+        track.bind("<Configure>", self._draw_level)
+        track.bind("<Button-1>", self._on_click)
+        track.bind("<Button-3>", self._on_right_click)
+        self._meter = track
+        self._meter_fill = fill
+
+    def _draw_lamps(self, canvas: tk.Canvas) -> None:
+        """The tray icon's two-lamp traffic light, drawn at panel scale."""
+        active = STATE_LAMPS.get(self._state, "red")
+        canvas.create_rectangle(0, 0, 13, 26, fill=HOUSING, outline=RIM)
+        for center_y, name, lit, dark in (
+            (7.5, "red", RED, DARK_RED),
+            (18.5, "green", GREEN, DARK_GREEN),
+        ):
+            canvas.create_oval(
+                3, center_y - 4, 11, center_y + 4,
+                fill=lit if active == name else dark, outline=RIM,
+            )
+
+    def _timer_text(self) -> str:
+        if self._state != "recording":
+            return ""
+        return format_elapsed(time.time() - self._started_at)
+
+    def _draw_level(self, _event=None) -> None:
+        """Paint the meter from the smoothed microphone level."""
+        if self._meter is None or self._meter_fill is None:
+            return
+        try:
+            width = max(1, self._meter.winfo_width())
+            self._meter.coords(
+                self._meter_fill, 0, 0, int(width * self._level), 3
+            )
+        except Exception:
+            pass
+
+    def _set_level(self, rms: float) -> None:
+        """RMS -> dBFS, shown on a -55..-12 dB scale, with a little smoothing.
+
+        Only the app sends this, and only while it is recording, so the panel
+        does not gate on its own state: it may still read "loading model"
+        while the microphone is already live.
+        """
+        db = 20.0 * math.log10(max(float(rms), 1e-6))
+        level = min(1.0, max(0.0, (db + 55.0) / 43.0))
+        self._level = self._level * 0.55 + level * 0.45
+        self._draw_level()
 
     def _build_entries(self) -> None:
         tk.Frame(self._container, bg=BORDER, height=1).pack(fill="x", padx=8)
@@ -458,17 +629,19 @@ class TranscriptOverlay:
         dot = tk.Label(
             row, text="●", bg=BG,
             fg=GREEN if self._capture_ok else RED,
-            font=(FONT, 10),
+            font=(FONT, 8),
         )
         dot.pack(side="left")
         dot.bind("<Button-1>", self._on_click)
 
         title = tk.Label(
             row,
-            text="Shortcut set" if self._capture_done and self._capture_ok
-            else "Shortcut not usable" if self._capture_done
-            else "Set shortcut",
-            bg=BG, fg=TEXT, font=(FONT, 10), anchor="w",
+            text=_caps(
+                "shortcut set" if self._capture_done and self._capture_ok
+                else "shortcut not usable" if self._capture_done
+                else "set shortcut"
+            ),
+            bg=BG, fg=MUTED, font=(FONT, 8), anchor="w",
         )
         title.pack(side="left", padx=(8, 6), fill="x", expand=True)
         title.bind("<Button-1>", self._on_click)
@@ -509,6 +682,59 @@ class TranscriptOverlay:
         hint.bind("<Button-1>", self._on_click)
         hint.bind("<Button-3>", self._on_right_click)
 
+    def _build_login(self) -> None:
+        row = tk.Frame(self._container, bg=BG, padx=14)
+        row.pack(fill="x", pady=(11, 0))
+        row.bind("<Button-1>", self._on_click)
+        row.bind("<Button-3>", self._on_right_click)
+
+        lamps = tk.Canvas(
+            row, width=13, height=26, bg=BG, bd=0,
+            highlightthickness=0, takefocus=0,
+        )
+        lamps.pack(side="left")
+        canvas = lamps
+        canvas.create_rectangle(0, 0, 13, 26, fill=HOUSING, outline=RIM)
+        canvas.create_oval(3, 3.5, 11, 11.5, fill=RED, outline=RIM)
+        canvas.create_oval(3, 14.5, 11, 22.5, fill=DARK_GREEN, outline=RIM)
+        lamps.bind("<Button-1>", self._on_click)
+        lamps.bind("<Button-3>", self._on_right_click)
+
+        title = tk.Label(
+            row, text=_caps("claude login"), bg=BG, fg=MUTED,
+            font=(FONT, 8), anchor="w",
+        )
+        title.pack(side="left", padx=(8, 0))
+        title.bind("<Button-1>", self._on_click)
+
+        close = tk.Label(row, text="✕", bg=BG, fg=MUTED, font=(FONT, 9))
+        close.pack(side="right")
+        close.bind("<Button-1>", self._on_close)
+        close.bind("<Enter>", lambda _e: close.configure(fg=TEXT))
+        close.bind("<Leave>", lambda _e: close.configure(fg=MUTED))
+
+        body = tk.Label(
+            self._container,
+            text=self._login_text or "Your Claude login expired.",
+            bg=BG, fg=TEXT, font=(FONT, 12), anchor="w",
+            justify="left", wraplength=self.WIDTH - 28,
+        )
+        body.pack(fill="x", padx=14, pady=(7, 0))
+        body.bind("<Button-1>", self._on_click)
+        body.bind("<Button-3>", self._on_right_click)
+
+        waiting = bool(self._login_note) and "wait" in self._login_note.lower()
+        hint = tk.Label(
+            self._container,
+            text=self._login_note or "Click here to sign in - no window changes focus",
+            bg=BG, fg=ACCENT if not waiting else MUTED,
+            font=(FONT, 9), anchor="w", justify="left",
+            wraplength=self.WIDTH - 28,
+        )
+        hint.pack(fill="x", padx=14, pady=(6, 12))
+        hint.bind("<Button-1>", self._on_click)
+        hint.bind("<Button-3>", self._on_right_click)
+
     def _build_clipboard(self) -> None:
         row = tk.Frame(self._container, bg=BG, padx=10, pady=8)
         row.pack(fill="x")
@@ -516,15 +742,15 @@ class TranscriptOverlay:
         row.bind("<Button-3>", self._on_right_click)
 
         if self._flash:
-            title, color = self._flash, GREEN
+            title, color = self._flash, ACCENT
         else:
             count = len(self._clipboard)
             title = "Clipboard history" + (f" · {count}" if count else "")
-            color = TEXT
+            color = MUTED
 
         label = tk.Label(
-            row, text=title, bg=BG, fg=color,
-            font=(FONT, 10), anchor="w", justify="left",
+            row, text=_caps(title), bg=BG, fg=color,
+            font=(FONT, 8), anchor="w", justify="left",
         )
         label.pack(side="left", padx=(0, 6), fill="x", expand=True)
         label.bind("<Button-1>", self._on_click)
@@ -608,24 +834,34 @@ class TranscriptOverlay:
         return "break"
 
     def _status_text(self) -> str:
+        """The one line under the header: the transcript, or what is happening."""
         if self._state == "recording":
-            return f"Recording  {format_elapsed(time.time() - self._started_at)}"
+            return "Listening…"
         if self._state == "transcribing":
             return "Transcribing…"
         if self._state == "loading":
-            return "Loading model…"
+            return "Loading the speech model…"
         if self._state == "paused":
             return "Dictation paused"
         if self._state == "error":
             return "Model error — open the log"
+        if self._notice:
+            return self._notice
         if self._expanded and self._entries:
             count = len(self._entries)
             return f"Transcript history · {count}" if count > 1 else "Transcript history"
-        if self._notice:
-            return self._notice
         if self._entries:
-            return _one_line(self._entries[0][1])
+            return _clamped(self._entries[0][1])
         return "Ready — hold your shortcut to dictate"
+
+    def _body_color(self) -> str:
+        """Dim while nothing has been said yet, bright once it is final."""
+        if self._state == "error":
+            return BAD
+        if self._state in ("idle", "loading") and not self._expanded \
+                and not self._notice and self._entries:
+            return TEXT
+        return DIM_TEXT
 
     def _place(self, hidden: bool = False) -> None:
         root = self._root
@@ -698,10 +934,11 @@ class TranscriptOverlay:
             if self._state != "recording" or self._root is None:
                 return
             try:
-                if self._status_label is not None:
-                    self._status_label.configure(
-                        text=f"Recording  {format_elapsed(time.time() - self._started_at)}"
-                    )
+                if self._timer_label is not None:
+                    self._timer_label.configure(text=self._timer_text())
+                # Let the meter fall back when the microphone goes quiet.
+                self._level *= 0.7
+                self._draw_level()
             except Exception:
                 pass
             self._timer_job = self._root.after(250, tick)
@@ -743,6 +980,14 @@ class TranscriptOverlay:
 
     # -- events -----------------------------------------------------------
     def _on_click(self, _event=None):
+        if self._mode == "login":
+            callback = self.on_login
+            if callable(callback):
+                try:
+                    callback()
+                except Exception:
+                    pass
+            return "break"
         if self._mode == "capture":
             if self._capture_done:
                 self._cancel_hide()
@@ -764,6 +1009,10 @@ class TranscriptOverlay:
         return "break"
 
     def _on_close(self, _event=None):
+        if self._mode == "login":
+            self._cancel_hide()
+            self._hide()
+            return "break"
         if self._mode == "capture":
             if self._capture_done:
                 self._cancel_hide()
@@ -787,6 +1036,10 @@ class TranscriptOverlay:
                 pass
 
     def _on_right_click(self, _event=None):
+        if self._mode == "login":
+            self._cancel_hide()
+            self._hide()
+            return "break"
         if self._mode == "capture":
             if self._capture_done:
                 self._cancel_hide()

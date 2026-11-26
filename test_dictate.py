@@ -36,6 +36,119 @@ class DurationTests(unittest.TestCase):
         self.assertEqual(dictate.format_duration(125), "2m05s")
 
 
+class EngineChainTests(unittest.TestCase):
+    def test_single_engine_with_fallback(self):
+        self.assertEqual(
+            dictate.resolve_engine_order("gemini", [], True), ["gemini", "local"]
+        )
+        self.assertEqual(dictate.resolve_engine_order("gemini", [], False), ["gemini"])
+        self.assertEqual(dictate.resolve_engine_order("anthropic", [], True), ["anthropic", "local"])
+        self.assertEqual(dictate.resolve_engine_order("local", [], True), ["local"])
+
+    def test_explicit_order_wins_and_is_cleaned(self):
+        self.assertEqual(
+            dictate.resolve_engine_order(
+                "local", ["GEMINI", "bogus", "gemini", "local"], True
+            ),
+            ["gemini", "local"],
+        )
+        self.assertEqual(
+            dictate.resolve_engine_order("gemini", "gemini, anthropic ,local", False),
+            ["gemini", "anthropic", "local"],
+        )
+
+    def test_unknown_becomes_local(self):
+        self.assertEqual(dictate.resolve_engine_order("nonsense", [], True), ["local"])
+        self.assertEqual(dictate.resolve_engine_order("", None, True), ["local"])
+
+    def test_config_list_coercion(self):
+        self.assertEqual(
+            dictate._coerce("stt_engine_order", "gemini, local"), ["gemini", "local"]
+        )
+        self.assertEqual(
+            dictate._coerce("stt_engine_order", ["Gemini", "LOCAL"]),
+            ["gemini", "local"],
+        )
+        self.assertEqual(dictate._coerce("stt_engine_order", 5), [])
+
+
+class ChainFailoverTests(unittest.TestCase):
+    """Exercise the ported from-cloudstream replay loop without a microphone."""
+
+    def _app(self, order, gemini=("", ""), claude=("", ""), local="", model=True):
+        app = types.SimpleNamespace()
+        app.settings = types.SimpleNamespace(
+            stt_engine=order[0], stt_engine_order=list(order)
+        )
+        app.fallback_to_local = True
+        app._stt_failure = ""
+        app._model = object() if model else None
+        app.model_error = None
+        app.calls = []
+        app.notices = []
+        app._notify_panel = lambda message: app.notices.append(message)
+        app._engine_order = types.MethodType(
+            dictate.VoiceDictationApp._engine_order, app
+        )
+        app.transcribe_with_engine = types.MethodType(
+            dictate.VoiceDictationApp.transcribe_with_engine, app
+        )
+
+        def cloud(name, outcome):
+            text, error = outcome
+
+            def run(audio, ctx=None):
+                app.calls.append(name)
+                app._stt_failure = error
+                return text
+
+            return run
+
+        def run_local(audio, ctx=None):
+            app.calls.append("local")
+            return local
+
+        app.transcribe_gemini = cloud("gemini", gemini)
+        app.transcribe_claude = cloud("claude", claude)
+        app._local_transcribe = run_local
+        return app
+
+    def test_primary_success_stops_chain(self):
+        app = self._app(["gemini", "local"], gemini=("hello", ""))
+        self.assertEqual(app.transcribe_with_engine("audio"), "hello")
+        self.assertEqual(app.calls, ["gemini"])
+
+    def test_failure_replays_same_clip_into_local(self):
+        app = self._app(
+            ["gemini", "local"],
+            gemini=("", "quota exceeded"),
+            local="from the local model",
+        )
+        self.assertEqual(app.transcribe_with_engine("audio"), "from the local model")
+        self.assertEqual(app.calls, ["gemini", "local"])
+        self.assertTrue(any("used the local model" in n for n in app.notices))
+        self.assertEqual(app._stt_failure, "")
+
+    def test_silence_without_error_stops_chain(self):
+        app = self._app(["gemini", "local"], gemini=("", ""), local="unused")
+        self.assertEqual(app.transcribe_with_engine("audio"), "")
+        self.assertEqual(app.calls, ["gemini"])
+
+    def test_missing_local_model_fails_over_to_cloud(self):
+        app = self._app(
+            ["local", "gemini"], gemini=("rescued", ""), model=False
+        )
+        self.assertEqual(app.transcribe_with_engine("audio"), "rescued")
+        self.assertEqual(app.calls, ["local", "gemini"])
+
+    def test_keeps_last_error_when_nothing_transcribes(self):
+        app = self._app(
+            ["gemini", "local"], gemini=("", "bad key"), local=""
+        )
+        self.assertEqual(app.transcribe_with_engine("audio"), "")
+        self.assertEqual(app._stt_failure, "bad key")
+
+
 class TrimSilenceTests(unittest.TestCase):
     SR = 16000
 

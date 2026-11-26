@@ -1,10 +1,18 @@
 # type4voices
 
-Local voice typing for Windows, macOS and Linux. Hold a shortcut, speak, let go,
-and the text appears at the cursor in whichever window has focus. Qwen3-ASR does
-the transcription on your machine, and a small local language model then repairs
-weak or misheard English into what you meant. Audio, text and telemetry stay
-there.
+Voice typing for Windows, macOS and Linux. Hold a shortcut, speak, let go, and
+the text appears at the cursor in whichever window has focus.
+
+There are three speech engines. By default your clip goes to Google's Gemini 3.5
+Transcribe Live over the public Live API with your own API key: documented,
+cheap, and no 4.4 GB model in memory while you talk. You can switch to the same
+speech-to-text stream Claude Code's `/voice` mode uses, on the Claude login you
+already have (see the terms warning below), or to Qwen3-ASR on your own machine,
+offline. Whichever heads the queue, the others can catch the clip if it fails:
+the whole recording is buffered and replayed into the next engine, so a dead
+socket costs latency, not the sentence. Either way a small local language model
+then repairs weak or misheard English into what you meant, and that part never
+leaves the machine. See [Where the speech goes](#where-the-speech-goes).
 
 The default shortcut is the second mouse side button (Forward). You can record
 any key, key combination or mouse click instead, from the tray menu.
@@ -20,22 +28,94 @@ not been run on real hardware yet. See [Platform notes](#platform-notes).
 - Holding the shortcut records. Releasing transcribes and pastes.
 - The tray icon is a two-lamp traffic light: green while recording or
   transcribing, red while idle, both lamps dark while paused.
-- A small panel shows the recording timer and then the recognised text. Click it
-  for the history. It never takes keyboard focus, so the paste still lands in
-  your window.
+- A small panel carries the same traffic light: two lamps, the state in small
+  caps, the timer while recording, a live microphone level, and then the
+  recognised text. Click it for the history. It never takes keyboard focus, so
+  the paste still lands in your window.
 - The transcript stays on the clipboard after pasting. Left-click the traffic
   light to see the last five clipboard items and click one to copy it back.
 - Spoken numbers, punctuation and filler words are cleaned up before pasting.
+- Speech is transcribed by Gemini (API key), by Claude on your subscription, or
+  by Qwen3-ASR on this machine; one tray click picks the first engine, and the
+  rest of the chain catches a failure. Your hotwords and the terms visible in
+  the focused window travel with the audio as keyterms either way.
 - Weak grammar and misheard words are rewritten into clean English by a local
   LLM ("I already tell him many time" → "I've already told him many times").
   See [Fixing weak English](#fixing-weak-english).
 - On Windows the shortcut is swallowed before the focused app sees it, so the
   side button no longer navigates the browser.
 
+## Where the speech goes
+
+**Gemini (default).** The clip is streamed to Google's
+`wss://generativelanguage.googleapis.com/ws/...BidiGenerateContent` Live
+endpoint, authenticated with the API key in `gemini_api_key` (or
+`GEMINI_API_KEY`). This is the documented, supported path: hotwords go in as
+`customVocabulary`, `VERBATIM` mode keeps your wording, and the free tier covers
+light use (about 0.005 USD per minute paid). If no key is configured, the chain
+falls through to the next engine.
+
+**Claude (opt-in, terms risk).** The clip is streamed to
+`wss://api.anthropic.com/api/ws/speech_to_text/voice_stream`, authenticated with
+the OAuth token Claude Code wrote to `~/.claude/.credentials.json`. That file is
+the only place a credential is read from or written to. When the access token
+has expired, the app exchanges the stored refresh token at the same endpoint and
+with the same client id the installed Claude Code client uses, then writes the
+rotated pair back — so your own client stays signed in too (a compare-and-swap
+keeps its newer token if it refreshed first). Set
+`"auto_refresh_claude_token": false` to stop that.
+
+**This is not permitted by Anthropic's terms, and Anthropic enforces it.** The
+endpoint is Claude Code's internal voice stream, not a documented API. Anthropic's
+[Claude Code legal page](https://code.claude.com/docs/en/legal-and-compliance)
+says OAuth authentication is intended *"exclusively"* for Claude Code and other
+native Anthropic applications, that third parties may not *"route requests
+through Free, Pro, Max, or Ultra plan credentials"*, and that developers may
+not *"collect, store, or intermediate"* session tokens. This app does all three:
+it reads the token Claude Code wrote, refreshes it, and writes the rotated pair
+back. Anthropic clarified the ban in February 2026 and has suspended accounts
+without warning. Keep this as a personal toggle, never ship it as the product's
+default, and use Gemini or local for anything public. If the endpoint changes,
+`anthropic_stt.py` holds the whole contract in one docstring.
+
+When the login lapses, you are not sent to a terminal. At startup, and again if
+a dictation fails on an expired token, the panel shows a **Claude login** card in
+the corner — the same non-activating window, so nothing you are typing loses
+focus. Clicking it runs `claude auth login` with no console window, which opens
+the browser sign-in; the card watches `claude auth status` and turns into
+"Claude login restored" when you finish, or offers another try if you don't.
+Dismiss it with ✕ or a right-click and dictation keeps its error message until
+you sign in.
+
+**Local.** Qwen3-ASR on your machine, offline, no account involved. Pick it in
+the tray, or set `"stt_engine": "local"` in `config.json`. The English fixer is
+local in all three cases.
+
+**The chain.** The engines are not mutually exclusive. `"stt_engine"` names the
+first one, and `"fallback_to_local": true` (the default) appends the local model.
+For a longer queue, set `"stt_engine_order"` explicitly, for example
+`["gemini", "anthropic", "local"]` or `["anthropic", "local"]`. The whole clip is
+kept until a transcript is final, so a provider that dies halfway is discarded
+and the identical audio is replayed into the next one; the panel says which
+engine caught it and the log keeps the list it tried. A provider that returns an
+empty result *without* an error is treated as real silence, and stops the chain.
+Choosing an engine from the tray resets the chain to that engine plus the local
+fallback.
+
+No engine is allowed to dead-end silently: a clip that Claude or Gemini cannot
+transcribe — expired login, bad key, no network, endpoint changed — is
+transcribed by the local model instead, and the panel says
+*Claude login needed — used the local model*. If the login (or the Gemini key)
+is already known to be missing at startup, the local model is warmed in the
+background so that fallback is not a cold 45 s load. Set `fallback_to_local` to
+`false` if you would rather get nothing than a local transcript.
+
 ## Install
 
-You need Python 3.10 or newer. The environment, the speech model (4.4 GB) and
-the English fixer (3.4 GB) take about 10 GB together.
+You need Python 3.10 or newer. With the local speech engine the environment, the
+speech model (4.4 GB) and the English fixer (3.4 GB) take about 10 GB together.
+With Claude or Gemini as the engine you still want the English fixer, so budget
+3.4 GB and skip the next paragraph's speech model.
 
 The Python code is shared. Each system has its own folder with the launchers,
 and all of them create `.venv` in this folder and run `dictate.py` from here.
@@ -45,16 +125,18 @@ and all of them create `.venv` in this folder and run `dictate.py` from here.
 1. Install Python 3.12 and tick *Add python.exe to PATH*.
 2. Double-click `windows\setup.bat`. It creates `.venv`, installs the pinned
    dependencies and runs the environment check.
-3. Download the two models once (about 8 GB, needs internet):
+3. Download the models once (about 8 GB, needs internet). `download_model.py`
+   fetches the speech model, which only the local engine needs; the second line
+   fetches the English fixer, which both engines use:
 
    ```
    .venv\Scripts\python.exe download_model.py
    .venv\Scripts\python.exe download_model.py --model Qwen/Qwen3-1.7B
    ```
 
-   Without the second one the app still works; it just pastes the transcript
-   without the English fix. On an Intel Arc / Core Ultra laptop, also install
-   the GPU build of torch (see [It feels slow](#it-feels-slow)).
+   Without the fixer the app still works; it just pastes the transcript without
+   the English fix. On an Intel Arc / Core Ultra laptop, also install the GPU
+   build of torch (see [It feels slow](#it-feels-slow)).
 
 4. Start it with `windows\run_dictate.bat` for a console window or
    `windows\run_dictate_background.vbs` for none. Ticking *Start with Windows*
@@ -108,7 +190,10 @@ and all of them create `.venv` in this folder and run `dictate.py` from here.
 The tray icon appears right away and stays red while the model loads. That is a
 few seconds once Python and torch imports are warm, and around 45 s on the first
 cold start, where importing torch and transformers dominates. You can dictate as
-soon as the icon is red rather than dark.
+soon as the icon is red rather than dark. With a cloud engine first in the chain
+no speech model loads until a clip actually needs the local fallback, so the
+light goes red as soon as the app is up; the English fixer still loads lazily on
+the first transcript.
 
 ## The model is not in this repository
 
@@ -225,6 +310,11 @@ safe; restart to apply.
 
 | Key | Default | Meaning |
 |---|---|---|
+| `stt_engine` | `gemini` | First speech engine: `gemini`, `anthropic` or `local`. The tray radio sets this. |
+| `gemini_api_key` | `""` | API key for the Gemini engine. Empty falls back to `GEMINI_API_KEY`. |
+| `stt_engine_order` | `[]` | Advanced: explicit provider chain, e.g. `["gemini", "local"]`. Empty derives from `stt_engine` + `fallback_to_local`. |
+| `fallback_to_local` | `true` | Append the local model after a cloud engine, so a failed clip is transcribed instead of dropped. |
+| `auto_refresh_claude_token` | `true` | Refresh the Claude OAuth token and write the rotated pair back. See the terms warning above. |
 | `model_id` | `Qwen/Qwen3-ASR-1.7B` | Model to load. `Qwen/Qwen3-ASR-0.6B` is faster if cached. |
 | `language` | `Auto` | Pin to `English`, `Chinese`, etc. to stop language flipping on short clips. |
 | `accent` | `""` | A sentence about the speaker, sent with the hotwords. Set it for a strong accent. |
@@ -482,7 +572,8 @@ The launchers are grouped by system, one folder each, and all of them run the
 code from the folder above.
 
 ```
-dictate.py                 app: tray, audio, queue, paste, CLI, config
+dictate.py                 app: tray, audio, queue, paste, CLI, config,
+                           provider chain + audio replay
 trigger.py                 shortcut backend (Windows hooks / pynput)
 capture.py                 "detect a new shortcut" recorder
 shortcuts.py               parse, validate, display and match shortcuts
@@ -490,17 +581,22 @@ platform_support.py        per-OS paste chord, clipboard, panel, autostart
 overlay.py                 mini panel: transcript, clipboard, shortcut recorder
 text_cleanup.py            deterministic number/punctuation/filler cleanup
 context_awareness.py       active-window app category, dynamic hotwords & privacy guard
+anthropic_stt.py           Claude voice stream (opt-in; see the terms warning)
+gemini_stt.py              Gemini 3.5 Transcribe Live (documented Live API)
 rewrite.py                 English fixer: prompt, guardrails, corrections, OpenAI backend
 rewrite_worker.py          runs a transformers-5 fixer (Gemma 4) in .venv-t5
 requirements-t5.txt        packages for .venv-t5
 eval_rewrite.py            scores fixer models on 28 weak-English cases
-test_dictate.py            tests for settings, shortcuts, audio helpers
+test_anthropic_stt.py      tests for the Claude wire contract helpers
+test_gemini_stt.py         tests for the Gemini setup/frame encoding
+test_dictate.py            tests for settings, shortcuts, audio, engine chain
 test_text_cleanup.py       tests for the cleanup pipeline (66 cases)
 test_rewrite.py            tests for the fixer's guardrails and corrections
 test_context_awareness.py  tests for window context, privacy guard & OpenAI rewriter
 test_mic.py                manual microphone and model diagnostic
 download_model.py          one-time model download (network allowed here)
 landing_page/index.html    project landing page, open in any browser
+legacy/cloudstream/        archived Electron prototype (source only, not built)
 config.json                created on first run
 hotwords.txt               optional domain words
 corrections.txt            fixed "heard => meant" replacements
@@ -529,7 +625,9 @@ trigger.py (shortcut down)  -> start_recording()          [never blocks]
 audio callback (16 kHz)     -> appends frames while recording
 trigger.py (shortcut up)    -> stop_recording_and_process()
    trim silence -> duration guards -> speech gate -> auto gain -> job queue
-worker thread               -> transcribe() (2 hearings, 1 GPU call)
+worker thread               -> transcribe_with_engine() walks the chain
+                               (gemini / anthropic / local), replaying the
+                               same clip into the next provider on failure
                             -> postprocess_text() -> corrections.txt
                             -> rewrite (LLM + guardrails) -> paste
 clipboard watcher (0.6 s)   -> ClipboardHistory.add() -> left-click panel

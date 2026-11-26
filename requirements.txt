@@ -11,6 +11,7 @@
 # Using a range allows the +xpu build to satisfy the requirement without being downgraded.
 numpy==2.5.4
 sounddevice==0.5.6
+websocket-client==1.8.0
 soundfile==0.14.0
 pillow==12.3.0
 pynput==1.8.2

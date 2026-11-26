@@ -1,0 +1,50 @@
+{
+  "$comment": [
+    "Observed wire contract of Claude Code's /voice speech-to-text stream.",
+    "Source: the Claude Code client's own voiceStreamSTT module (v2.1.x) —",
+    "wss://api.anthropic.com/api/ws/speech_to_text/voice_stream, raw PCM16",
+    "binary audio, JSON KeepAlive/CloseStream control, TranscriptText/",
+    "TranscriptEndpoint back. Transcription does not consume Claude messages.",
+    "Confirm on this machine with: npm run probe -- claude-voice",
+    "One second of silence must round-trip with no fatal error.",
+    "If a field drifts, re-capture with tools/ws-sniff.md and edit only this file."
+  ],
+  "verified": true,
+  "capturedAt": null,
+  "capturedFrom": "claude-code voiceStreamSTT 2.1.x (client source; local probe blocked by an expired token)",
+  "transport": {
+    "wsUrl": "wss://api.anthropic.com/api/ws/speech_to_text/voice_stream",
+    "query": {
+      "encoding": "linear16",
+      "sample_rate": "16000",
+      "channels": "1",
+      "endpointing_ms": "300",
+      "utterance_end_ms": "1000",
+      "language": "{language}",
+      "use_conversation_engine": "true",
+      "stt_provider": "deepgram-nova3"
+    },
+    "keytermsParam": "keyterms",
+    "headers": {
+      "authorization": "Bearer {accessToken}",
+      "x-app": "cli"
+    }
+  },
+  "audio": {
+    "binary": true,
+    "message": null
+  },
+  "control": {
+    "keepalive": { "type": "KeepAlive" },
+    "start": null,
+    "commit": { "type": "CloseStream" }
+  },
+  "receive": {
+    "typePath": "type",
+    "textPath": "data",
+    "interimTypes": ["TranscriptText"],
+    "finalTypes": ["TranscriptEndpoint"],
+    "errorTypes": ["TranscriptError", "error"],
+    "errorPaths": ["description", "message", "error_code"]
+  }
+}

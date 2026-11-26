@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="light">
 <meta name="theme-color" content="#faf9f6">
 <title>type4voices: speak the way you speak</title>
-<meta name="description" content="Local voice typing for Windows, macOS and Linux. Hold a button, talk, let go. Speech is transcribed on your machine, and a small local model rewrites weak or misheard English into what you meant. Offline, no account.">
+<meta name="description" content="Voice typing for Windows, macOS and Linux. Hold a button, talk, let go. Pick a cloud speech engine (Gemini API) or a fully local one (Qwen3-ASR, offline); a small local model then fixes weak or misheard English on your own machine.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 24'%3E%3Crect width='16' height='24' rx='5' fill='%2322252a'/%3E%3Ccircle cx='8' cy='8' r='3' fill='%23ef4136'/%3E%3Ccircle cx='8' cy='16' r='3' fill='%2322c55e'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -690,9 +690,9 @@
   <section class="hero" id="top">
     <div class="wrap hero-grid">
       <div>
-        <span class="eyebrow">Local voice typing &middot; Windows &middot; macOS &middot; Linux</span>
+        <span class="eyebrow">Voice typing &middot; Windows &middot; macOS &middot; Linux</span>
         <h1>Speak the way <span class="wavy">you speak</span>. <span class="serif">It types what you meant.</span></h1>
-        <p class="lead">Hold a button, talk, let go. Your words are transcribed <b>on your own machine</b>, and a small local model fixes broken grammar and misheard words before they reach the cursor, in any app.</p>
+        <p class="lead">Hold a button, talk, let go. Choose a cloud speech engine or a <b>fully local</b> one; either way the English fix runs <b>on your own machine</b>, and the text lands at the cursor in any app.</p>
         <div class="cta">
           <a class="btn primary" href="#install">Install it free</a>
           <a class="btn ghost" href="https://github.com/jaxontan/type4voices"><svg width="16" height="16" aria-hidden="true"><use href="#gh"/></svg>View source</a>
@@ -1017,7 +1017,7 @@
       <div class="faq fade">
         <details open>
           <summary>Does anything get sent to the internet?</summary>
-          <p>No. The models are downloaded once from Hugging Face. After that the app runs with <code>HF_HUB_OFFLINE=1</code>: no upload, no account, no telemetry. Audio and text stay on your machine.</p>
+          <p>It depends on the engine you pick. The local engine (Qwen3-ASR) never touches the network: models are downloaded once from Hugging Face, then the app runs with <code>HF_HUB_OFFLINE=1</code>. The Gemini engine uploads the clip to Google with your own API key; the optional Claude engine uses your own Claude login. The English fixer is local in every case. There is no telemetry, and no account with us.</p>
         </details>
         <details>
           <summary>Is it tested on macOS and Linux?</summary>

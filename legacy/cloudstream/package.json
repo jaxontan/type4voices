@@ -1,0 +1,26 @@
+{
+  "name": "cloudstream",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first push-to-talk dictation. Your audio, your provider, your credentials — never our server.",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
+    "dev": "npm run build && electron .",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "probe": "npm run build && electron dist/tools/probe-quota.js",
+    "selftest": "npm run build && electron . --selftest",
+    "selftest:audio": "npm run build && electron . --selftest-audio",
+    "smoke": "npm run build && electron . --smoke"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.10",
+    "@types/ws": "^8.18.2",
+    "electron": "^45.5.0",
+    "typescript": "~5.9"
+  },
+  "dependencies": {
+    "ws": "^8.23.0"
+  }
+}
